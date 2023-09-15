@@ -89,12 +89,8 @@ internal static partial class MonoModRules
 
 
         if (IsMod) 
-        {
-            Console.WriteLine("[FortRise] Mod Relinking");
-            if (IsFNA && RelinkAgainstFNA(MonoModRule.Modder))
-                Console.WriteLine("[FortRise] Relinked to FNA");
             return;
-        }
+        
 
         MonoModRule.Modder.PostProcessors += PostProcessMacros;
 
@@ -167,8 +163,8 @@ internal static partial class MonoModRules
 
         Console.WriteLine($"[FortRise] Platform Found: {PlatformHelper.Current}");
 
-        if (IsFNA && RelinkAgainstFNA(MonoModRule.Modder))
-            Console.WriteLine("[FortRise] Relinking to FNA");
+        // if (IsFNA && RelinkAgainstFNA(MonoModRule.Modder))
+        //     Console.WriteLine("[FortRise] Relinking to FNA");
 
         static void VisitType(TypeDefinition type) {
             // Remove readonly attribute from all static fields
