@@ -70,10 +70,10 @@ internal static partial class MonoModRules
         MonoModRule.Flag.Set("OS:Windows", IsWindows);
         MonoModRule.Flag.Set("OS:NotWindows", !IsWindows);
         ExecModName = System.Reflection.Assembly.GetExecutingAssembly().GetName().Name;
-        RulesModule = MonoModRule.Modder.DependencyMap.Keys.First(CheckIfMods);
+        RulesModule = MonoModRule.Modder.DependencyMap.Keys.FirstOrDefault(CheckIfMods);
 
         MonoModRule.Modder.PostProcessors += PostProcessor;
-        IsMod = !MonoModRule.Modder.Mods.Contains(RulesModule);
+        IsMod = RulesModule == null || !MonoModRule.Modder.Mods.Contains(RulesModule);
 
         try 
         {

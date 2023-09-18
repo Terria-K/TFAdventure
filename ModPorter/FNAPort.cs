@@ -9,21 +9,32 @@ namespace ModPorter;
 
 public class FNAPort : PortModule
 {
+    public override bool CanPort(ModuleDefinition mod)
+    {
+        // Check if the module references is XNA
+        if (!mod.AssemblyReferences.Any(asmRef => asmRef.Name.StartsWith("Microsoft.Xna.Framework"))) 
+        {
+            Console.WriteLine("No XNA");
+            return false;
+        }
+        return true;
+    }
+
+    public override void AutoPatch(PortMonoModder modder)
+    {
+        modder.ParseRules(modder.DependencyMap[modder.Module].First(dep => dep.Assembly.Name.Name == "ModPorter"));
+    }
+
     protected override void Port(ModuleDefinition mod)
     {
-        if (TryPort(mod)) 
+        if (TryPortToFNA(mod)) 
         {
             Console.WriteLine("[ModPorter] FNA Porting Successful!");
-            return;
         }
     }
 
-    private bool TryPort(ModuleDefinition mod) 
+    private bool TryPortToFNA(ModuleDefinition mod) 
     {
-        // Check if the module references is XNA
-        if (!mod.AssemblyReferences.Any(asmRef => asmRef.Name.StartsWith("Microsoft.Xna.Framework")))
-            return false;
-
         // Replace XNA assembly references with FNA ones
         using var FNA = ModuleDefinition.ReadModule("FNA.dll");
         bool didReplaceXNA = ReplaceAssemblyRefs(FNA.Assembly.Name);
@@ -118,5 +129,9 @@ public class FNAPort : PortModule
         }
 
         return !hasNewRef;
+    }
+
+    public override void PrePatch(ModuleDefinition mod)
+    {
     }
 }

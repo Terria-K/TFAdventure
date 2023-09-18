@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -12,19 +11,23 @@ namespace ModPorter;
 public static class ModPort 
 {
     private static List<PortModule> Porters = new();
-    private static List<AssemblyModifier> Modifiers = new();
 
     public static void AddModules(PortModule port) 
     {
         Porters.Add(port);
     }
 
-    public static void AddAssemblyModifier(AssemblyModifier modifier) 
+    public static void ClearContext() 
     {
-        Modifiers.Add(modifier);
+        Porters.Clear();
     }
 
-    public static void StartPorting(string path, string output = null, IAssemblyResolver resolver = null) 
+    public static void StartPorting(string path, string output = null, IAssemblyResolver resolver = null)  
+    {
+        StartPorting(path, output, true, resolver);
+    }
+
+    public static void StartPorting(string path, string output = null, bool noInlining = true, IAssemblyResolver resolver = null) 
     {
         ModuleDefinition moduleDefinition = null;
         try 
@@ -45,7 +48,7 @@ public static class ModPort
                 moduleDefinition = ModuleDefinition.ReadModule(path, readerParams);
             }
 
-            StartPorting(moduleDefinition, resolver);
+            StartPorting(moduleDefinition, noInlining, resolver);
 
             using var stream = File.Create(output ?? path);
 
@@ -59,44 +62,52 @@ public static class ModPort
 
     public static void StartPorting(ModuleDefinition mod, IAssemblyResolver resolver = null) 
     {
-        foreach (var modifier in Modifiers) 
-        {
-            modifier.ModifyAssembly(mod);
-        }
-        using var modder = new PortMonoModder(Porters) 
-        {
-            Module = mod,
-            MissingDependencyThrow = false,
-            AssemblyResolver = resolver
-        };
-
-        modder.PatchRefs(mod);
-        modder.MapDependencies();
-        modder.AutoPatch();
+        StartPorting(mod, true, resolver);
     }
-}
 
-public abstract class AssemblyModifier 
-{
-    public abstract void ModifyAssembly(ModuleDefinition mod);
-}
-
-public class Assembly32BitNotRequired : AssemblyModifier
-{
-    public override void ModifyAssembly(ModuleDefinition mod)
+    public static void StartPorting(ModuleDefinition mod, bool noInlining = true, IAssemblyResolver resolver = null) 
     {
-        mod.Attributes &= ~(ModuleAttributes.Required32Bit | ModuleAttributes.Preferred32Bit);
+        foreach (var modifier in Porters) 
+        {
+            modifier.PrePatch(mod);
+        }
+        foreach (var modifier in Porters) 
+        {
+            if (modifier.CanPort(mod)) 
+            {
+                using var modder = new PortMonoModder(modifier) 
+                {
+                    Module = mod,
+                    MissingDependencyThrow = false,
+                    AssemblyResolver = resolver,
+                    NoInlining = noInlining,
+                    PrivateSystemLinkRelinker = modifier.PrivateSystemLibsRelink
+                };
+
+
+                modder.MapDependencies();
+                modder.PatchRefs(mod);
+                modder.AutoPatch();
+                modifier.PostPatch(mod);
+            }
+        }
     }
 }
+
 
 public class PortMonoModder : MonoModder 
 {
-    private static List<PortModule> Porters = new();
     private static ModuleDefinition ModPorter;
 
-    public PortMonoModder(List<PortModule> portModules) 
+    private PortModule CurrentPortModule;
+
+    public readonly HashSet<string> PrivateSystemLibs = new HashSet<string>() { "System.Private.CoreLib" };
+    public bool NoInlining;
+    public bool PrivateSystemLinkRelinker;
+
+    public PortMonoModder(PortModule portModules) 
     {
-        Porters = portModules;
+        CurrentPortModule = portModules;
     }
 
     public override void Dispose() 
@@ -107,18 +118,29 @@ public class PortMonoModder : MonoModder
         base.Dispose();
     }
 
-    private void AddReference(string name) {
-        var asmName = Assembly.GetExecutingAssembly().GetReferencedAssemblies().First(asmName => asmName.Name == name);
-        if (!Module.AssemblyReferences.Any(asmRef => asmRef.Name == asmName.Name)) {
+    public void AddReference(AssemblyName asmName) {
+        if (!Module.AssemblyReferences.Any(asmRef => asmRef.Name == asmName.Name)) 
             Module.AssemblyReferences.Add(AssemblyNameReference.Parse(asmName.FullName));
-        }
     }
+
+    public void AddReference(string name) => AddReference(Assembly.GetExecutingAssembly().GetReferencedAssemblies().First(asmName => asmName.Name == name));
 
     public override void MapDependencies()
     {
+        CurrentPortModule.MapDependecies(this);
+        AddReference(Assembly.GetExecutingAssembly().GetName());
+
         ModPorter ??= ModuleDefinition.ReadModule(Assembly.GetExecutingAssembly().Location);
         DependencyCache[Assembly.GetExecutingAssembly().FullName] = ModPorter;
         base.MapDependencies();
+    }
+
+    public override IMetadataTokenProvider Relinker(IMetadataTokenProvider mtp, IGenericParameterProvider context)
+    {
+        IMetadataTokenProvider relinkedMetadataTokenProvider = base.Relinker(mtp, context);
+        if (PrivateSystemLinkRelinker && relinkedMetadataTokenProvider is TypeReference typeRef && PrivateSystemLibs.Contains(typeRef.Scope.Name))
+            return Module.ImportReference(FindType(typeRef.FullName));
+        return relinkedMetadataTokenProvider;
     }
 
 
@@ -126,9 +148,18 @@ public class PortMonoModder : MonoModder
     {
         base.PatchRefs(mod);
 
-        foreach (var port in Porters) 
-        {
-            port.StartPort(this);
-        }
+        CurrentPortModule.StartPort(this);
+    }
+
+    public override void AutoPatch()
+    {
+        CurrentPortModule.AutoPatch(this);
+        base.AutoPatch();
+    }
+
+    public override void PatchRefsInMethod(MethodDefinition method)
+    {
+        base.PatchRefsInMethod(method);
+        CurrentPortModule.PatchMethod(this, method);
     }
 }
