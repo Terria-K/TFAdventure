@@ -14,6 +14,8 @@ public class DiscordComponent : GameComponent
     private Discord.Activity NextPresence;
     private bool dirty;
 
+    public const string FortRiseIcon = "https://i.imgur.com/jMyu0Hl.png";
+
     public DiscordComponent(Game game) : base(game)
     {
         UpdateOrder = -50000;
@@ -148,7 +150,7 @@ public class DiscordComponent : GameComponent
         };
 
         NextPresence.Assets.LargeText = "FortRise";
-        NextPresence.Assets.LargeImage = "https://i.imgur.com/nNc3UG2.png";
+        NextPresence.Assets.LargeImage = FortRiseIcon;
         NextPresence.Assets.SmallImage = "versus";
         NextPresence.Assets.SmallText = "TowerFall";
 
@@ -334,7 +336,7 @@ public class DiscordComponent : GameComponent
         }
 
         NextPresence.Assets.LargeText = "FortRise";
-        NextPresence.Assets.LargeImage = "https://i.imgur.com/nNc3UG2.png";
+        NextPresence.Assets.LargeImage = FortRiseIcon;
 
         dirty = true;
     }
