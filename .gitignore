@@ -12,6 +12,7 @@ Installer/lib/**/*.pdb
 Installer/lib/**/*.so
 Installer/lib/**/*.so.0
 Installer/lib/**/*.dylib
+Installer/lib/runtime.zip
 Installer/lib-old/
 Installer/lib-native/
 Installer/lib-kick/

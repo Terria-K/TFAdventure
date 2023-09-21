@@ -313,8 +313,8 @@ public static class TowerRegistry
                 levelData.SetTreasureChances((float[])TreasureSpawner.DefaultTreasureChances.Clone());
                 for (int i = 0; i < array.Length; i++)
                 {
-                    var treasure = array[i];
-                    ParseTreasure(treasure.AsSpan().Trim(), out string resTreasure, out int chance, out int rate);
+                    ReadOnlySpan<char> treasure = array[i];
+                    ParseTreasure(treasure.Trim(), out string resTreasure, out int chance, out int rate);
                     if (!patch_Calc.TryStringToEnum<Pickups>(resTreasure, out var pickups)) 
                     {
                         Logger.Error($"[ADVENTURE][VERSUS] The pickup name '{resTreasure}' cannot be found.");
@@ -365,10 +365,10 @@ public static class TowerRegistry
             if (numText.Contains("%".AsSpan(), StringComparison.InvariantCulture)) 
             {
                 var chanceSlice = numText.Slice(0, numText.IndexOf('%'));
-                chance = int.Parse(chanceSlice.ToString());
+                chance = int.Parse(new string(chanceSlice));
                 continue;
             }
-            rate = int.Parse(numText.ToString());
+            rate = int.Parse(new string(numText));
         }
     }
 

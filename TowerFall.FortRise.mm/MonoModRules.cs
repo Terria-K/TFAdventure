@@ -66,7 +66,7 @@ internal static partial class MonoModRules
         if (MonoModRule.Modder.WriterParameters.WriteSymbols)
             MonoModRule.Modder.WriterParameters.SymbolWriterProvider = new PortablePdbWriterProvider();
 
-        IsWindows = PlatformHelper.Is(Platform.Windows);
+        IsWindows = PlatformDetection.OS == OSKind.Windows;
         MonoModRule.Flag.Set("OS:Windows", IsWindows);
         MonoModRule.Flag.Set("OS:NotWindows", !IsWindows);
         ExecModName = System.Reflection.Assembly.GetExecutingAssembly().GetName().Name;
@@ -87,9 +87,21 @@ internal static partial class MonoModRules
             // No-Op
         }
 
+        Console.WriteLine($"[FortRise] Is Mod? {IsMod}");
 
         if (IsMod) 
+        {
+            AssemblyNameReference TowerFallAsmRef = new AssemblyNameReference("TowerFall", new Version(1, 0, 0, 0));
+            if (IsFNA && RelinkAgainstFNA(MonoModRule.Modder))
+                Console.WriteLine("[FortRise] Relinked to FNA");
+            if (!(MonoModRule.Modder.Module.AssemblyReferences.FirstOrDefault(asmRef => asmRef.Name.Equals(TowerFallAsmRef.Name)) is AssemblyNameReference towerFallRef)) 
+            {
+                Console.WriteLine("[FortRise] Ensured TowerFall");
+                MonoModRule.Modder.Module.AssemblyReferences.Add(towerFallRef = TowerFallAsmRef);
+                MonoModRule.Modder.MapDependency(MonoModRule.Modder.Module, TowerFallAsmRef);
+            }
             return;
+        }
         
 
         MonoModRule.Modder.PostProcessors += PostProcessMacros;
@@ -161,7 +173,7 @@ internal static partial class MonoModRules
                 throw new Exception("This version of TowerFall is already modded. You need a clean install of TowerFall to mod it.");
         }
 
-        Console.WriteLine($"[FortRise] Platform Found: {PlatformHelper.Current}");
+        Console.WriteLine($"[FortRise] Platform Found: {PlatformDetection.OS}");
 
         // if (IsFNA && RelinkAgainstFNA(MonoModRule.Modder))
         //     Console.WriteLine("[FortRise] Relinking to FNA");

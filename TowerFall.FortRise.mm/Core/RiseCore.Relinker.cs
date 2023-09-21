@@ -4,6 +4,7 @@ using System.IO;
 using System.Reflection;
 using System.Text;
 using Ionic.Zip;
+using ModPorter;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Mono.Cecil.Mdb;
@@ -33,10 +34,6 @@ public static partial class RiseCore
         public static List<Assembly> RelinkedAssemblies = new();
         private static Dictionary<string, ModuleDefinition> relinkedModules = new ();
 
-        internal readonly static Dictionary<string, ModuleDefinition> StaticRelinkModuleCache = new Dictionary<string, ModuleDefinition>() {
-            { "MonoMod", ModuleDefinition.ReadModule(typeof(MonoModder).Assembly.Location, new ReaderParameters(ReadingMode.Immediate)) },
-            { "TowerFall", ModuleDefinition.ReadModule(typeof(TFGame).Assembly.Location, new ReaderParameters(ReadingMode.Immediate)) }
-        };
         private static Dictionary<string, ModuleDefinition> sharedRelinkModuleMap;
         public static Dictionary<string, ModuleDefinition> SharedRelinkModuleMap
         {
@@ -46,38 +43,30 @@ public static partial class RiseCore
                     return sharedRelinkModuleMap;
                 
                 sharedRelinkModuleMap = new Dictionary<string, ModuleDefinition>();
-                string[] entries = Directory.GetFiles(GameRootPath);
-                for (int i = 0; i < entries.Length; i++) 
+                foreach (var path in Directory.GetFiles(GameRootPath))
                 {
-                    var path = entries[i];
                     var name = Path.GetFileName(path);
-                    var nn = name.Substring(0, Math.Max(0, name.Length - 4));
-
                     if (name.EndsWith(".mm.dll")) 
                     {
-                        if (name.StartsWith("TowerFall.")) 
+                        string modName = Path.GetFileNameWithoutExtension(path);
+                        string relinkedPath;
+                        if (name == "TowerFall.FortRise.mm.dll") 
                         {
-                            sharedRelinkModuleMap[nn] = StaticRelinkModuleCache["TowerFall"];
-                            Logger.Info($"[Relinker] Relinking {name}");
+                            relinkedPath = typeof(TFGame).Assembly.Location;
                         }
                         else 
                         {
-                            Logger.Warning($"[Relinker] Found unknown {name}");
-                            int dot = name.IndexOf(".");
-                            if (dot < 0)
+                            Logger.Warning($"[Relinker] Found unknown mod assembly {name}");
+                            relinkedPath = name.Substring(0, modName.Length - 3);
+                            var pathRelinked = Path.Combine(GameRootPath, relinkedPath + ".dll");
+                            if (File.Exists(pathRelinked))
+                                Logger.Info($"[RELINKER] Remapping to {Path.GetFileName(pathRelinked)}");
+                            else {
+                                Logger.Info($"[RELINKER] Couldn't remap, ignoring...");
                                 continue;
-                            string nameRelinkedNeutral = name.Substring(0, dot);
-                            string nameRelinked = nameRelinkedNeutral + ".dll";
-                            string pathRelinked = Path.Combine(Path.GetDirectoryName(path), nameRelinked);
-                            if (!File.Exists(pathRelinked))
-                                continue;
-                            if (!StaticRelinkModuleCache.TryGetValue(nameRelinkedNeutral, out ModuleDefinition relinked)) {
-                                relinked = ModuleDefinition.ReadModule(pathRelinked, new ReaderParameters(ReadingMode.Immediate));
-                                StaticRelinkModuleCache[nameRelinkedNeutral] = relinked;
                             }
-                            Logger.Info($"[Relinker] Remapped to {nameRelinked}");
-                            sharedRelinkModuleMap[nn] = relinked;
                         }
+                        sharedRelinkModuleMap[modName] = ModuleDefinition.ReadModule(relinkedPath, new ReaderParameters(ReadingMode.Immediate));
                     }
                 }
                 return sharedRelinkModuleMap;
@@ -94,32 +83,6 @@ public static partial class RiseCore
                     return sharedRelinkMap;
                 
                 sharedRelinkMap = new Dictionary<string, object>();
-                AssemblyName[] asmRefs = typeof(TFGame).Assembly.GetReferencedAssemblies();
-
-                for (int i = 0; i < asmRefs.Length; i++) 
-                {
-                    var asmRef = asmRefs[i];
-
-                    if (!asmRef.FullName.ToLowerInvariant().Contains("fna") &&
-                        !asmRef.FullName.ToLowerInvariant().Contains("xna") &&
-                        !asmRef.FullName.ToLowerInvariant().Contains("monogame"))
-                            continue;
-                    
-                    Logger.Info($"[Relinker] Relinking {asmRef.Name}");
-
-                    var asm = Assembly.Load(asmRef);
-                    var module = ModuleDefinition.ReadModule(asm.Location, new ReaderParameters(ReadingMode.Immediate));
-                    SharedRelinkModuleMap[asmRef.FullName] = SharedRelinkModuleMap[asmRef.Name] = module;
-                    Type[] types = asm.GetExportedTypes();
-                    for (int k = 0; k < types.Length; k++) 
-                    {
-                        var type = types[k];
-                        var typeDef = module.GetType(type.FullName) ?? module.GetType(type.FullName.Replace('+', '/'));
-                        if (typeDef == null)
-                            continue;
-                        SharedRelinkMap[typeDef.FullName] = typeDef;
-                    }
-                }
 
                 return sharedRelinkMap;
             }
@@ -243,7 +206,7 @@ public static partial class RiseCore
                 var mod = ModuleDefinition.ReadModule(cachedPath);
                 try 
                 {
-                    var asm = Assembly.LoadFrom(cachedPath);
+                    var asm = meta.AssemblyContext.LoadFromAssemblyPath(cachedPath);
                     RelinkedAssemblies.Add(asm);
 
                     if (!relinkedModules.ContainsKey(mod.Assembly.Name.Name)) 
@@ -334,7 +297,6 @@ public static partial class RiseCore
                     ((RelinkerSymbolReaderProvider)modder.ReaderParameters.SymbolReaderProvider).Format = DebugSymbolFormat.Auto;
                 }
 
-                modder.MapDependencies();
                 if (runtimeRulesModule == null) 
                 {
                     string rulesPath = Path.Combine(
@@ -357,6 +319,7 @@ public static partial class RiseCore
                     }
                 }
 
+                modder.MapDependencies();
                 modder.MapDependencies(runtimeRulesModule);
                 var runtimeRulesType = runtimeRulesModule.GetType("MonoMod.MonoModRules");
                 modder.ParseRules(runtimeRulesModule);
@@ -365,6 +328,10 @@ public static partial class RiseCore
 
                 modder.ParseRules(modder.Module);
                 modder.AutoPatch();
+
+                ModPort.AddModules(new CorePort());
+                ModPort.StartPorting(modder.Module, true, true);
+
                 ISymbolWriterProvider symbolWriterProvider = modder.WriterParameters.SymbolWriterProvider;
 
                 Retry:
@@ -403,7 +370,6 @@ public static partial class RiseCore
                 {
                     modder.WriterParameters.SymbolWriterProvider = symbolWriterProvider;
                 }
-
 
                 module = modder.Module;
             }
@@ -444,7 +410,7 @@ public static partial class RiseCore
                     }
                 }
 
-                var asm = Assembly.LoadFrom(cachedPath);
+                var asm = meta.AssemblyContext.LoadFromAssemblyPath(cachedPath);
                 RelinkedAssemblies.Add(asm);
                 if (!relinkedModules.ContainsKey(module.Assembly.Name.Name)) 
                 {

@@ -3,28 +3,41 @@ using System.IO;
 using System;
 using System.Reflection;
 using System.Xml;
+using System.Collections.Generic;
+using System.Reflection.Metadata;
+using System.Reflection.PortableExecutable;
+using System.Linq;
 
 namespace FortRise.Installer;
 
-public class Installer : MarshalByRefObject
+public class Installer 
 {
     public static Assembly AsmMonoMod;
     public static Assembly AsmHookGen;
+    public static Assembly AsmModPorter;
+
+
+    public static readonly string[] NetCoreSystemLibs = new string[] {
+        "System.Drawing.Common.dll", "System.Security.Permissions.dll", "System.Windows.Extensions.dll"
+    };
 
 
     private static readonly string[] fileDependencies = {
         "FNA.dll", "FNA.dll.config",
-        "FNA.xml", "MonoMod.RuntimeDetour.HookGen.exe",
-        "MonoMod.exe", 
+        "FNA.xml", "MonoMod.RuntimeDetour.HookGen.dll",
+        "MonoMod.Patcher.dll", "ModPorter.dll",
         "MonoMod.xml", "0Harmony.dll",
         "MonoMod.Utils.dll", "MonoMod.Utils.xml", 
         "MonoMod.RuntimeDetour.HookGen.xml",
+        "Microsoft.Win32.SystemEvents.dll",
+        "System.Drawing.Common.dll", "System.Security.Permissions.dll", "System.Windows.Extensions.dll",
+        "MonoMod.ILHelpers.dll", "MonoMod.Backports.dll",
         "TowerFall.FortRise.mm.xml",
         "TowerFall.FortRise.mm.pdb",
+        "MonoMod.Core.dll", "MonoMod.Core.xml", "MonoMod.Iced.dll", "MonoMod.Iced.xml",
         "MonoMod.RuntimeDetour.dll", "MonoMod.RuntimeDetour.xml",
         "Mono.Cecil.dll", "Mono.Cecil.Mdb.dll", "Mono.Cecil.Pdb.dll",
         "TeuJson.dll", "DotNetZip.dll", "NLua.dll", "KeraLua.dll",
-        "MonoMod.ILHelpers.dll", "MonoMod.Backports.dll",
         "DiscordGameSdk.dll", "Fortrise.targets"
     };
 
@@ -39,7 +52,7 @@ public class Installer : MarshalByRefObject
         switch (Environment.OSVersion.Platform) 
         {
         case PlatformID.MacOSX:
-            FNAPath = "MacOS/osx";
+            FNAPath = "lib64-osx";
             FNACopy = CopyFNAFiles_MacOS;
             fnaLibs = new string[] {
                 "libFAudio.0.dylib", "libFNA3D.0.dylib", "liblua53.dylib",
@@ -48,7 +61,7 @@ public class Installer : MarshalByRefObject
             };
             break;
         case PlatformID.Unix:
-            FNAPath = "lib64";
+            FNAPath = "lib64-linux";
             FNACopy = CopyFNAFiles_Linux;
             fnaLibs = new string[] {
                 "libFAudio.so.0", "libFNA3D.so.0", "liblua53.so",
@@ -56,12 +69,26 @@ public class Installer : MarshalByRefObject
             };
             break;
         default:
-            FNAPath = "x86";
-            FNACopy = CopyFNAFiles_Windows;
-            fnaLibs = new string[] {
-                "FAudio.dll", "FNA3D.dll", "lua53.dll",
-                "SDL2.dll", "libtheorafile.dll", "discord_game_sdk.dll"
-            };
+            fnaLibs = new string[8];
+            if (Environment.Is64BitOperatingSystem) 
+            {
+                FNAPath = "lib64-win-x86";
+                FNACopy = CopyFNAFiles_WindowsX64;
+                fnaLibs[7] = "steam_api64.dll";
+            }
+            else 
+            {
+                FNAPath = "lib64-win-x86";
+                FNACopy = CopyFNAFiles_WindowsX86;
+                fnaLibs[7] = "steam_api.dll";
+            }
+            fnaLibs[0] = "FAudio.dll";
+            fnaLibs[1] = "FNA3D.dll";
+            fnaLibs[2] = "lua53.dll";
+            fnaLibs[3] = "CSteamworks.dll";
+            fnaLibs[4] = "SDL2.dll";
+            fnaLibs[5] = "libtheorafile.dll";
+            fnaLibs[6] = "discord_game_sdk.dll";
             break;
         }
         
@@ -142,12 +169,23 @@ public class Installer : MarshalByRefObject
         LoadAssembly(Path.Combine(path, "MonoMod.Utils.dll"));
         LoadAssembly(Path.Combine(path, "MonoMod.RuntimeDetour.dll"));
 
-        AsmMonoMod = LoadAssembly(Path.Combine(path, "MonoMod.exe"));
-        AsmHookGen = LoadAssembly(Path.Combine(path, "MonoMod.RuntimeDetour.HookGen.exe"));
+        AsmMonoMod = LoadAssembly(Path.Combine(path, "MonoMod.Patcher.dll"));
+        AsmModPorter = LoadAssembly(Path.Combine(path, "ModPorter.dll"));
+        AsmHookGen = LoadAssembly(Path.Combine(path, "MonoMod.RuntimeDetour.HookGen.dll"));
+
+        var towerFallExe = Path.Combine(path, "TowerFall.dll");
+        var towerFallPdb = Path.Combine(path, "TowerFall.pdb");
+
+        PortToFNA(Path.Combine(path, "TowerFall.exe"), Path.Combine(path, "FNA-TowerFall.exe"));
+        File.Move(Path.Combine(path, "FNA-TowerFall.exe"), Path.Combine(path, "TowerFall.exe"), true);
+
+        ConvertToNETCore(
+            Path.Combine(path, "TowerFall.exe"), 
+            Path.Combine(path, "TowerFall.dll"));
 
         Environment.SetEnvironmentVariable("MONOMOD_DEPENDENCY_MISSING_THROW", "0");
         int returnCode = (int) AsmMonoMod.EntryPoint.Invoke(null, new object[] { 
-            new string[] { Path.Combine(path, "TowerFall.exe"), Path.Combine(path, "MONOMODDED_TowerFall.exe") } });
+            new string[] { Path.Combine(path, "TowerFall.dll"), Path.Combine(path, "MONOMODDED_TowerFall.dll") } });
         if (returnCode != 0) 
         {
             ThrowError("MonoMod failed to patch the assembly");
@@ -156,8 +194,7 @@ public class Installer : MarshalByRefObject
         }
 
         Underline("Renaming the output");
-        var towerFallExe = Path.Combine(path, "TowerFall.exe");
-        var towerFallPdb = Path.Combine(path, "TowerFall.pdb");
+
         if (File.Exists(towerFallExe)) 
         {
             File.Delete(towerFallExe);
@@ -167,7 +204,7 @@ public class Installer : MarshalByRefObject
             File.Delete(towerFallPdb);
         }
 
-        var moddedOutputExe = Path.Combine(path, "MONOMODDED_TowerFall.exe");
+        var moddedOutputExe = Path.Combine(path, "MONOMODDED_TowerFall.dll");
         var moddedOutputPdb = Path.Combine(path, "MONOMODDED_TowerFall.pdb");
         File.Move(moddedOutputExe, towerFallExe);
         File.Move(moddedOutputPdb, towerFallPdb);
@@ -175,14 +212,22 @@ public class Installer : MarshalByRefObject
         Yellow("Generating HookGen");
 
         Environment.SetEnvironmentVariable("MONOMOD_DEPENDENCY_MISSING_THROW", "0");
-        AsmHookGen.EntryPoint.Invoke(null, new object[] { new string[] { "--private", Path.Combine(path, "TowerFall.exe"), Path.Combine(path, "MMHOOK_TowerFall.dll") } });
+        AsmHookGen.EntryPoint.Invoke(null, new object[] { new string[] { "--private", Path.Combine(path, "TowerFall.dll"), Path.Combine(path, "MMHOOK_TowerFall.dll") } });
+
+
+        AsmModPorter.GetType("ModPorter.NetCoreUtils")
+            .GetMethod("GenerateRuntimeConfig", BindingFlags.Static | BindingFlags.Public, null, new Type[] { 
+                typeof(string), typeof(string[])}, null)
+            .Invoke(null, new object[] { Path.Combine(path, "TowerFall.dll"), new string[] {
+                Path.Combine(path, "MMHOOK_TowerFall.dll")
+            } });
 
         var patchVersion = Path.Combine(path, "PatchVersion.txt");
 
         Underline("Writing the version file");
 
         var sb = new StringBuilder();
-        sb.AppendLine("Installer Version: " + "4.2.0");
+        sb.AppendLine("Installer Version: " + "4.3.0");
 
         var text = sb.ToString();
 
@@ -192,6 +237,90 @@ public class Installer : MarshalByRefObject
         Environment.SetEnvironmentVariable("MONOMOD_DEPENDENCY_MISSING_THROW", "");
 
         Succeed("Installed");
+    }
+
+    private static void PortToFNA(string asmFrom, string asmTo = null) 
+    {
+        asmTo ??= asmFrom;
+
+        AsmModPorter.GetType("ModPorter.ModPort")
+            .GetMethod("FNAShortcut", BindingFlags.Static | BindingFlags.Public, null, new Type[] { 
+                typeof(string), typeof(string)}, null)
+            .Invoke(null, new object[] { asmFrom, asmTo});
+
+        AsmModPorter.GetType("ModPorter.ModPort")
+            .GetMethod("ClearContext", BindingFlags.Static | BindingFlags.Public)
+            .Invoke(null, Array.Empty<object>());
+    }
+
+    private static void ConvertToNETCore(string asmFrom, string asmTo = null) 
+    {
+        asmTo ??= asmFrom;
+        string[] deps = GetPEAssemblyReferences(asmFrom).Keys.ToArray();
+
+        if (!asmFrom.Contains("TowerFall.exe") && deps.Contains("ModPorter"))
+            return;
+        
+        foreach (var dep in deps) 
+        {
+            if (dep.Contains("ModPorter"))
+                continue;
+            var srcPath = Path.Combine(Path.GetDirectoryName(asmFrom), $"{dep}.dll");
+            var dstPath = Path.Combine(Path.GetDirectoryName(asmTo), $"CORE-{dep}.dll");
+            if (File.Exists(srcPath) && !IsSystemLibrary(srcPath))
+            {
+                if (!File.Exists(Path.Combine(Path.GetDirectoryName(asmFrom), $"fortOrig/{dep}.dll")))
+                    File.Copy(Path.Combine(Path.GetDirectoryName(asmFrom), $"{dep}.dll"), 
+                        Path.Combine(Path.GetDirectoryName(asmFrom), $"fortOrig/{dep}.dll"));
+                ConvertToNETCore(srcPath, dstPath);
+
+                if (!File.Exists(dstPath))
+                    continue;
+                File.Move(Path.Combine(Path.GetDirectoryName(asmTo), $"CORE-{dep}.dll"), Path.Combine(Path.GetDirectoryName(asmTo), $"{dep}.dll"), true);
+            }
+            else if (File.Exists(dstPath) && !IsSystemLibrary(srcPath))
+            {
+                if (!File.Exists(Path.Combine(Path.GetDirectoryName(asmFrom), $"fortOrig/{dep}.dll")))
+                    File.Copy(Path.Combine(Path.GetDirectoryName(asmFrom), $"{dep}.dll"), 
+                        Path.Combine(Path.GetDirectoryName(asmFrom), $"fortOrig/{dep}.dll"));
+                ConvertToNETCore(dstPath);
+
+                File.Move(Path.Combine(Path.GetDirectoryName(asmTo), $"CORE-{dep}.dll"), Path.Combine(Path.GetDirectoryName(asmTo), $"{dep}.dll"), true);
+            }
+        }
+
+        Console.WriteLine($"Converting {asmFrom} to .NET 7");
+
+        AsmModPorter.GetType("ModPorter.ModPort")
+            .GetMethod("NetCoreShortcut", BindingFlags.Static | BindingFlags.Public, null, new Type[] { 
+                typeof(string), typeof(string), typeof(bool)}, null)
+            .Invoke(null, new object[] { asmFrom, asmTo, true });
+    }
+
+    private static bool IsSystemLibrary(string file) {
+        if (Path.GetExtension(file) != ".dll")
+            return false;
+
+        if (Path.GetFileName(file).StartsWith("System.") && !NetCoreSystemLibs.Contains(Path.GetFileName(file)))
+            return true;
+
+        return new string[] {
+            "mscorlib.dll",
+            "Mono.Posix.dll",
+            "Mono.Security.dll"
+        }.Any(name => Path.GetFileName(file).Equals(name, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static Dictionary<string, string> GetPEAssemblyReferences(string path) 
+    {
+        using var fs = File.OpenRead(path);
+        using var peReader = new PEReader(fs);
+
+        MetadataReader meta = peReader.GetMetadataReader();
+        var deps = new Dictionary<string, string>();
+        foreach (var asmRef in meta.AssemblyReferences.Select(meta.GetAssemblyReference))
+            deps.TryAdd(meta.GetString(asmRef.Name), asmRef.Version.ToString());
+        return deps;
     }
 
     public void Uninstall(string path) 
@@ -269,18 +398,36 @@ public class Installer : MarshalByRefObject
         xmlDocument.Save(toPath);
     }
 
-    private static void CopyFNAFiles_Windows(string path) 
+    private static void CopyFNAFiles_WindowsX86(string path) 
     {
-        Console.WriteLine("CopyFNAFiles_Windows is called");
+        Console.WriteLine("CopyFNAFiles_WindowsX86 is called");
         foreach (var fnaLib in fnaLibs) 
         {
-            var lib = Path.Combine("x86", fnaLib);
+            var lib = Path.Combine("lib64-win-x86", fnaLib);
             if (!File.Exists(lib)) 
             {
                 ThrowErrorContinous($"{lib} file not found!");
                 continue;
             }   
-            var x86Path = Path.Combine(path, "x86");
+            var x86Path = Path.Combine(path, "lib64-win-x86");
+            if (!Directory.Exists(x86Path)) 
+                Directory.CreateDirectory(x86Path);
+            File.Copy(lib, Path.Combine(x86Path, Path.GetFileName(lib)), true);
+        }
+    }
+
+    private static void CopyFNAFiles_WindowsX64(string path) 
+    {
+        Console.WriteLine("CopyFNAFiles_Windows64 is called");
+        foreach (var fnaLib in fnaLibs) 
+        {
+            var lib = Path.Combine("lib64-win-x64", fnaLib);
+            if (!File.Exists(lib)) 
+            {
+                ThrowErrorContinous($"{lib} file not found!");
+                continue;
+            }   
+            var x86Path = Path.Combine(path, "lib64-win-x64");
             if (!Directory.Exists(x86Path)) 
                 Directory.CreateDirectory(x86Path);
             File.Copy(lib, Path.Combine(x86Path, Path.GetFileName(lib)), true);
@@ -292,16 +439,16 @@ public class Installer : MarshalByRefObject
         Console.WriteLine("CopyFNAFiles_Linux is called");
         foreach (var fnaLib in fnaLibs) 
         {
-            var origPath = Path.Combine(path, "lib64/orig");
+            var origPath = Path.Combine(path, "lib64-linux/orig");
 
-            var lib64Path = Path.Combine(path, "lib64");
+            var lib64Path = Path.Combine(path, "lib64-linux");
             if (!Directory.Exists(origPath)) 
                 Directory.CreateDirectory(origPath);
             
             if (File.Exists(Path.Combine(lib64Path, Path.GetFileName(fnaLib))) && !File.Exists(Path.Combine(origPath, Path.GetFileName(fnaLib))))
                 File.Copy(Path.Combine(lib64Path, Path.GetFileName(fnaLib)), origPath, true);
             
-            var lib = Path.Combine("lib64", fnaLib);
+            var lib = Path.Combine("lib64-linux", fnaLib);
             if (!File.Exists(lib)) 
             {
                 ThrowErrorContinous($"{lib} file not found!");
@@ -314,10 +461,9 @@ public class Installer : MarshalByRefObject
     private static void CopyFNAFiles_MacOS(string path) 
     {
         Console.WriteLine("CopyFNAFiles_MACOS is called");
-        var macOSPath = new DirectoryInfo(path).Parent.FullName;
         foreach (var fnaLib in fnaLibs) 
         {
-            var osxPath = Path.Combine(macOSPath, "MacOS/Resources/osx");
+            var osxPath = Path.Combine(path, "lib64-osx");
             var origPath = Path.Combine(osxPath, "orig");
             if (!Directory.Exists(origPath)) 
                 Directory.CreateDirectory(origPath);
@@ -325,7 +471,7 @@ public class Installer : MarshalByRefObject
             if (File.Exists(Path.Combine(osxPath, Path.GetFileName(fnaLib))) && !File.Exists(Path.Combine(origPath, Path.GetFileName(fnaLib))))
                 File.Copy(Path.Combine(osxPath, Path.GetFileName(fnaLib)), origPath, true);
             
-            var lib = Path.Combine("osx", fnaLib);
+            var lib = Path.Combine("lib64-osx", fnaLib);
             if (!File.Exists(lib)) 
             {
                 ThrowErrorContinous($"{lib} file not found!");

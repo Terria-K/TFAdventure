@@ -20,25 +20,7 @@ internal class Program
             }
             try 
             {
-                Console.WriteLine("Creating Sandbox App Domain");
-                AppDomain domain = null;
-                var app = new AppDomainSetup();
-                app.ApplicationBase = Path.GetDirectoryName(Assembly.GetEntryAssembly().Location);
-                app.LoaderOptimization = LoaderOptimization.SingleDomain;
-
-                domain = AppDomain.CreateDomain(
-                    AppDomain.CurrentDomain.FriendlyName + " FortRise Installer",
-                    AppDomain.CurrentDomain.Evidence,
-                    app,
-                    AppDomain.CurrentDomain.PermissionSet
-                );
-
-                Console.WriteLine("Created " + AppDomain.CurrentDomain.FriendlyName + " FortRise Installer");
-
-                var installer = (Installer)domain.CreateInstanceAndUnwrap(
-                    typeof(Installer).Assembly.FullName,
-                    typeof(Installer).FullName
-                );
+                var installer = new Installer();
                 if (args[0] == "--patch") 
                 {
                     Console.WriteLine("Installing FortRise");
@@ -50,10 +32,6 @@ internal class Program
                     installer.Uninstall(args[1]);
                     return;
                 }
-
-                Console.WriteLine("Unloading Sandbox App Domain");
-                AppDomain.Unload(domain);
-                Console.WriteLine("Unloaded");
             }
             catch (Exception e)
             {

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
+using System.Runtime.Loader;
 using TeuJson;
 using TowerFall;
 
@@ -206,6 +207,7 @@ public class ModuleMetadata : IEquatable<ModuleMetadata>, IDeserialize
     public ModuleMetadata[] Dependencies;
     public string NativePath;
     public string NativePathX86;
+    public AssemblyLoadContext AssemblyContext = AssemblyLoadContext.Default;
 
     public ModuleMetadata() {}
 

@@ -22,6 +22,18 @@ public static class ModPort
         Porters.Clear();
     }
 
+    public static void FNAShortcut(string path, string output = null) 
+    {
+        Porters.Add(new FNAPort());
+        StartPorting(path, output ?? path, null);
+    }
+
+    public static void NetCoreShortcut(string path, string output = null, bool inline = true) 
+    {
+        Porters.Add(new CorePort());
+        StartPorting(path, output ?? path, inline);
+    }
+
     public static void StartPorting(string path, string output = null, IAssemblyResolver resolver = null)  
     {
         StartPorting(path, output, true, resolver);
@@ -67,6 +79,11 @@ public static class ModPort
 
     public static void StartPorting(ModuleDefinition mod, bool noInlining = true, IAssemblyResolver resolver = null) 
     {
+        StartPorting(mod, noInlining, false, resolver);
+    }
+
+    public static void StartPorting(ModuleDefinition mod, bool noInlining = true, bool sharedDeps = false, IAssemblyResolver resolver = null) 
+    {
         foreach (var modifier in Porters) 
         {
             modifier.PrePatch(mod);
@@ -81,12 +98,12 @@ public static class ModPort
                     MissingDependencyThrow = false,
                     AssemblyResolver = resolver,
                     NoInlining = noInlining,
-                    PrivateSystemLinkRelinker = modifier.PrivateSystemLibsRelink
+                    PrivateSystemLinkRelinker = modifier.PrivateSystemLibsRelink,
+                    SharedDeps = sharedDeps
                 };
 
 
                 modder.MapDependencies();
-                modder.PatchRefs(mod);
                 modder.AutoPatch();
                 modifier.PostPatch(mod);
             }
@@ -104,6 +121,7 @@ public class PortMonoModder : MonoModder
     public readonly HashSet<string> PrivateSystemLibs = new HashSet<string>() { "System.Private.CoreLib" };
     public bool NoInlining;
     public bool PrivateSystemLinkRelinker;
+    public bool SharedDeps;
 
     public PortMonoModder(PortModule portModules) 
     {
@@ -113,6 +131,11 @@ public class PortMonoModder : MonoModder
     public override void Dispose() 
     {
         Module = null;
+        if (SharedDeps) 
+        {
+            DependencyMap.Clear();
+            DependencyCache.Clear();
+        }
         ModPorter?.Dispose();
 
         base.Dispose();

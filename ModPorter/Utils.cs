@@ -12,20 +12,27 @@ namespace ModPorter;
 
 public static class NetCoreUtils 
 {
-    public static void GenerateRuntimeConfig(string asm) 
+    public static void GenerateRuntimeConfig(string asmInput, string[] additionalDeps = null) 
     {
-        Console.WriteLine($"Generating Runtime Config for {asm}");
+        additionalDeps ??= Array.Empty<string>();
+        Console.WriteLine($"Generating Runtime Config for {asmInput}");
 
         var framework = Assembly.GetExecutingAssembly()
             .GetCustomAttribute<TargetFrameworkAttribute>().FrameworkName;
         
         var netVer = framework.Substring(21);
 
-        using var runtimeConfigFs = File.OpenWrite(Path.ChangeExtension(asm, ".runtimeconfig.json"));
+        using var runtimeConfigFs = File.OpenWrite(Path.ChangeExtension(asmInput, ".runtimeconfig.json"));
         var runtimeConfigObj = new JsonObject() 
         {
             ["runtimeOptions"] = new JsonObject
             {
+                ["configProperties"] = new JsonObject 
+                {
+                    ["NetBeautyLibsDir"] = ".;libraries",
+                    ["NetBeautySharedRuntimeMode"] = "no",
+                    ["STARTUP_HOOKS"] = "nbloader"
+                },
                 ["tfm"] = $"net{netVer}",
                 ["framework"] = new JsonObject 
                 {
@@ -54,9 +61,11 @@ public static class NetCoreUtils
                     AddAssembly(depPath);
             }
         }
-        AddAssembly(asm);
+        AddAssembly(asmInput);
+        foreach (var addDep in additionalDeps)
+            AddAssembly(addDep);
 
-        using var depsFs = File.OpenWrite(Path.ChangeExtension(asm, ".deps.json"));
+        using var depsFs = File.OpenWrite(Path.ChangeExtension(asmInput, ".deps.json"));
         var frameworkObj = new JsonObject();
         foreach (var (path, deps) in assemblies) 
         {
@@ -84,7 +93,7 @@ public static class NetCoreUtils
         {
             librariesObj[$"{Path.GetFileNameWithoutExtension(path)}/{GetPEAssemblyVersion(path)}"] = new JsonObject 
             {
-                ["type"] = (path == asm) ? "project" : "reference",
+                ["type"] = (path == asmInput) ? "project" : "reference",
                 ["servicable"] = false,
                 ["sha512"] = ""
             };   

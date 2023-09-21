@@ -1,14 +1,19 @@
 using System;
 using System.Collections;
+using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
 using FortRise;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
 using Monocle;
 using MonoMod;
 using MonoMod.RuntimeDetour;
 using MonoMod.Utils;
+using SDL2;
+using Steamworks;
 
 namespace TowerFall;
 
@@ -30,6 +35,7 @@ public partial class patch_TFGame : TFGame
 {
     public static bool SoundLoaded;
     private const int LOAD_LIBRARY_SEARCH_DEFAULT_DIRS = 0x00001000;
+    private static string FILENAME;
 
     public static patch_Atlas FortRiseMenuAtlas;
     public static bool Loaded
@@ -57,9 +63,11 @@ public partial class patch_TFGame : TFGame
             this.noIntro = RiseCore.DebugMode;
     }
 
-    public extern static void orig_Main(string[] args);
     public static void Main(string[] args) 
     {
+        if (!LaunchClient())
+            return;
+
         var towerFallPath = typeof(TFGame).Assembly.Location;
         bool vanillaLaunch = false;
         foreach (var arg in args) 
@@ -89,21 +97,21 @@ public partial class patch_TFGame : TFGame
             thread.Join();
             goto Exit;
         }
-        if (Environment.OSVersion.Platform == PlatformID.Win32NT) 
+        if (PlatformDetection.OS == OSKind.Windows) 
         {
             try 
             {
                 NativeMethods.SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
                 NativeMethods.AddDllDirectory(Path.Combine(
                     AppDomain.CurrentDomain.BaseDirectory,
-                    Environment.Is64BitProcess ? "x64" : "x86"
+                    Environment.Is64BitProcess ? "lib-win-x64" : "lib-win-x86"
                 ));
             }
             catch 
             {
                 NativeMethods.SetDllDirectory(Path.Combine(
                     AppDomain.CurrentDomain.BaseDirectory,
-                    Environment.Is64BitProcess ? "x64" : "x86"
+                    Environment.Is64BitProcess ? "lib-win-x64" : "lib-win-x86"
                 ));
             }
         }
@@ -135,21 +143,21 @@ public partial class patch_TFGame : TFGame
         }
         if (RiseCore.DebugMode) 
         {
-            var detourModManager = new DetourModManager();
-            detourModManager.OnILHook += (assembly, source, dest) => 
-            {
-                object obj = dest.Target;
-                RiseCore.DetourLogs.Add($"ILHook from {assembly.GetName().Name}: {source.GetID()} :: {dest.Method?.GetID() ?? "??"}{(obj == null ? "" : $"(object: {obj})")}");
-            };
-            detourModManager.OnHook += (assembly, source, dest, obj) => 
-            {
-                RiseCore.DetourLogs.Add($"Hook from {assembly.GetName().Name}: {source.GetID()} :: {dest.GetID()}{(obj == null ? "" : $"(object: {obj})")}");
-            };
+            // var detourModManager = new DetourModManager();
+            // detourModManager.OnILHook += (assembly, source, dest) => 
+            // {
+            //     object obj = dest.Target;
+            //     RiseCore.DetourLogs.Add($"ILHook from {assembly.GetName().Name}: {source.GetID()} :: {dest.Method?.GetID() ?? "??"}{(obj == null ? "" : $"(object: {obj})")}");
+            // };
+            // detourModManager.OnHook += (assembly, source, dest, obj) => 
+            // {
+            //     RiseCore.DetourLogs.Add($"Hook from {assembly.GetName().Name}: {source.GetID()} :: {dest.GetID()}{(obj == null ? "" : $"(object: {obj})")}");
+            // };
 
-            detourModManager.OnDetour += (assembly, source, dest) => 
-            {
-                RiseCore.DetourLogs.Add($"Detour from {assembly.GetName().Name}: {source.GetID()} :: {dest.GetID()}");
-            };
+            // detourModManager.OnDetour += (assembly, source, dest) => 
+            // {
+            //     RiseCore.DetourLogs.Add($"Detour from {assembly.GetName().Name}: {source.GetID()} :: {dest.GetID()}");
+            // };
             
             try 
             {
@@ -164,7 +172,7 @@ public partial class patch_TFGame : TFGame
 
         try 
         {
-            orig_Main(args);
+            TFMain(args);
 
             if (RiseCore.WillRestart) 
             {
@@ -182,6 +190,89 @@ public partial class patch_TFGame : TFGame
         Logger.WriteToFile("fortRiseLog.txt");
         Environment.Exit(0);
     }
+
+    [MonoModIfFlag("Steamworks")]
+    [MonoModPatch("LaunchClient")]
+    internal static bool LaunchClient_Steam() 
+    {
+        TFGame.WriteLineToLoadLog("Initializing Steam...");
+        if (SteamAPI.RestartAppIfNecessary(TFGame.STEAM_ID))
+        {
+            return false;
+        }
+        bool flag3 = SteamAPI.Init();
+        if (flag3)
+        {
+            SteamUserStats.RequestCurrentStats();
+            SteamUserStats.RequestGlobalStats(7);
+        }
+        if (!flag3)
+        {
+            SDL.SDL_ShowSimpleMessageBox(SDL.SDL_MessageBoxFlags.SDL_MESSAGEBOX_ERROR, "SAVE THIS MESSAGE!", "Couldn't find Steam", IntPtr.Zero);
+            return false;
+        }
+        return true;
+    }
+
+
+    [MonoModIfFlag("NoLauncher")]
+    [MonoModPatch("LaunchClient")]
+    internal static bool LaunchClient_NoLauncher() 
+    {
+        return true;
+    }
+
+    [STAThread]
+    public static void TFMain(string[] args)
+    {
+        bool noIntro = false;
+        bool loadlog = false;
+        foreach (string text in args)
+        {
+            if (text.ToLower(CultureInfo.InvariantCulture) == "nointro" || text.ToLower(CultureInfo.InvariantCulture) == "-nointro")
+            {
+                noIntro = true;
+            }
+            else if (text.ToLower(CultureInfo.InvariantCulture) == "loadlog" || text.ToLower(CultureInfo.InvariantCulture) == "-loadlog")
+            {
+                loadlog = true;
+            }
+            else if (text.ToLower(CultureInfo.InvariantCulture) == "noquit" || text.ToLower(CultureInfo.InvariantCulture) == "-noquit")
+            {
+                MainMenu.NoQuit = true;
+            }
+            else if (text.ToLower(CultureInfo.InvariantCulture) == "nogamepads" || text.ToLower(CultureInfo.InvariantCulture) == "-nogamepads")
+            {
+                MainMenu.NoGamepads = true;
+            }
+            else if (text.ToLower(CultureInfo.InvariantCulture) == "nogamepadupdates" || text.ToLower(CultureInfo.InvariantCulture) == "-nogamepadupdates")
+            {
+                MainMenu.NoGamepadUpdates = true;
+            }
+        }
+        if (loadlog)
+        {
+            TFGame.StartLoadLog();
+        }
+        TFGame.WriteLineToLoadLog("Initializing game window...");
+        try
+        {
+            using var tfgame = new TFGame(noIntro);
+            TFGame.WriteLineToLoadLog("Starting game...");
+            tfgame.Run();
+            
+        }
+        catch (NoSuitableGraphicsDeviceException)
+        {
+            SDL.SDL_ShowSimpleMessageBox(SDL.SDL_MessageBoxFlags.SDL_MESSAGEBOX_ERROR, "SAVE THIS MESSAGE!", "No suitable graphics card found!", IntPtr.Zero);
+        }
+        catch (Exception ex)
+        {
+            TFGame.Log(ex, false);
+            TFGame.OpenLog();
+        }
+    }
+
 
     protected extern void orig_LoadContent();
 
@@ -231,6 +322,21 @@ public partial class patch_TFGame : TFGame
         RiseCore.Events.Invoke_Render(Monocle.Draw.SpriteBatch);
         base.Draw(gameTime);
         RiseCore.Events.Invoke_AfterRender(Monocle.Draw.SpriteBatch);
+    }
+
+    [MonoModReplace]
+    public static void OpenLog() 
+    {
+        if (File.Exists(FILENAME))
+        {
+            new Process
+            {
+                StartInfo = new ProcessStartInfo(FILENAME)
+                {
+                    UseShellExecute = true
+                }
+            }.Start();
+        }
     }
 
     [MonoModReplace]
@@ -390,5 +496,13 @@ public partial class patch_TFGame : TFGame
         }
         patch_TFGame.Loaded = true;
         yield break;
+    }
+
+    [MonoModIgnore]
+    internal static extern bool LaunchClient();
+
+    public enum patch_Genders
+    {
+        Male, Female, Other
     }
 }

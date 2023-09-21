@@ -9,8 +9,8 @@
   <ItemGroup>
     <PackageReference Include="TeuJson" Version="3.1.2" />
     <PackageReference Include="Mono.Cecil" Version="0.11.4" />
-    <PackageReference Include="MonoMod" Version="22.7.31.1" />
-    <PackageReference Include="MonoMod.Utils" Version="22.7.31.1" />
+    <ProjectReference Include="../lib-modules/MonoMod/src/MonoMod.Patcher/MonoMod.Patcher.csproj"/>
+    <ProjectReference Include="../lib-modules/MonoMod/src/MonoMod.Utils/MonoMod.Utils.csproj"/>
   </ItemGroup>
 
 </Project>
