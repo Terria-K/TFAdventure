@@ -1,3 +1,5 @@
+using System;
+using FortRise;
 using Microsoft.Xna.Framework;
 using Monocle;
 using MonoMod;
@@ -6,7 +8,9 @@ namespace TowerFall;
 
 public class patch_VersusModeButton : VersusModeButton
 {
+    public static event Action ModeSwitch;
     private Wiggler iconWiggler;
+    private static int currentIndex;
     public patch_VersusModeButton(Vector2 position, Vector2 tweenFrom) : base(position, tweenFrom)
     {
     }
@@ -28,27 +32,49 @@ public class patch_VersusModeButton : VersusModeButton
         const int BuiltInModeCount = 3;
         base_Update();
 
-        Modes mode = MainMenu.VersusMatchSettings.Mode;
         string currentModeName = patch_MainMenu.VersusMatchSettings.CurrentModeName;
         if (!Selected)
             return;
         
-        int idx = CustomVersusRoundLogic.VersusModes.IndexOf(currentModeName);
-        if (idx < CustomVersusRoundLogic.VersusModes.Count - 1 && MenuInput.Right)
+        if (currentIndex < GameModeRegistry.VersusGameModes.Count + BuiltInModeCount - 1 && MenuInput.Right)
         {
-            patch_MainMenu.VersusMatchSettings.IsCustom = !((idx + 1) < BuiltInModeCount);
-            var modeName = patch_MainMenu.VersusMatchSettings.CurrentModeName = CustomVersusRoundLogic.VersusModes[idx + 1];
-            patch_MainMenu.VersusMatchSettings.Mode = CustomVersusRoundLogic.LookUpModes[modeName];
+            currentIndex++;
+            if (currentIndex < 3) 
+            {
+                patch_MainMenu.VersusMatchSettings.IsCustom = false;
+                MainMenu.VersusMatchSettings.Mode = (Modes)currentIndex + BuiltInModeCount;
+            }
+            else 
+            {
+                patch_MainMenu.VersusMatchSettings.IsCustom = true;
+                var gameMode = GameModeRegistry.VersusGameModes[currentIndex - BuiltInModeCount];
+                MainMenu.VersusMatchSettings.Mode = gameMode.GameModeInternal;
+                patch_MainMenu.VersusMatchSettings.CurrentModeName = gameMode.ID;
+            }
+
+            ModeSwitch?.Invoke();
             Sounds.ui_move2.Play(160f, 1f);
             iconWiggler.Start();
             base_OnConfirm();
             UpdateSides();
         }
-        else if (idx > 0 && MenuInput.Left)
+        else if (currentIndex > 0 && MenuInput.Left)
         {
-            patch_MainMenu.VersusMatchSettings.IsCustom = !((idx - 1) < BuiltInModeCount);
-            var modeName = patch_MainMenu.VersusMatchSettings.CurrentModeName = CustomVersusRoundLogic.VersusModes[idx - 1];
-            patch_MainMenu.VersusMatchSettings.Mode = CustomVersusRoundLogic.LookUpModes[modeName];
+            currentIndex--;
+            if (currentIndex < 3) 
+            {
+                patch_MainMenu.VersusMatchSettings.IsCustom = false;
+                MainMenu.VersusMatchSettings.Mode = (Modes)currentIndex + BuiltInModeCount;
+            }
+            else 
+            {
+                patch_MainMenu.VersusMatchSettings.IsCustom = true;
+                var gameMode = GameModeRegistry.VersusGameModes[currentIndex - BuiltInModeCount];
+                MainMenu.VersusMatchSettings.Mode = gameMode.GameModeInternal;
+                patch_MainMenu.VersusMatchSettings.CurrentModeName = gameMode.ID;
+            }
+
+            ModeSwitch?.Invoke();
             Sounds.ui_move2.Play(160f, 1f);
             iconWiggler.Start();
             base_OnConfirm();
@@ -61,21 +87,17 @@ public class patch_VersusModeButton : VersusModeButton
     private void UpdateSides() 
     {
         orig_UpdateSides();
-
-        int idx = CustomVersusRoundLogic.VersusModes.IndexOf(patch_MainMenu.VersusMatchSettings.CurrentModeName);
-
-        DrawRight = (idx < CustomVersusRoundLogic.VersusModes.Count-1);
+        DrawRight = (currentIndex < GameModeRegistry.VersusGameModes.Count + 3 - 1);
+        DrawLeft = currentIndex != 0;
     }
 
     public extern static Subtexture orig_GetModeIcon(Modes mode);
 
     public static Subtexture GetModeIcon(Modes mode)
     {
-        if (patch_MainMenu.VersusMatchSettings.IsCustom) 
+        if (patch_MainMenu.VersusMatchSettings.IsCustom && GameModeRegistry.TryGetGameMode(patch_MainMenu.VersusMatchSettings.CurrentModeName, out var gameMode)) 
         {
-            if (FortRise.RiseCore.RoundLogicIdentifiers.TryGetValue(
-                patch_MainMenu.VersusMatchSettings.CurrentModeName, out var val))
-                    return val.Icon;
+            return gameMode.Icon;
         }
         return orig_GetModeIcon(mode);
     }
@@ -84,11 +106,9 @@ public class patch_VersusModeButton : VersusModeButton
 
     public static string GetModeName(Modes mode)
     {
-        if (patch_MainMenu.VersusMatchSettings.IsCustom) 
+        if (patch_MainMenu.VersusMatchSettings.IsCustom && GameModeRegistry.TryGetGameMode(patch_MainMenu.VersusMatchSettings.CurrentModeName, out var gameMode)) 
         {
-            if (FortRise.RiseCore.RoundLogicIdentifiers.TryGetValue(
-                patch_MainMenu.VersusMatchSettings.CurrentModeName, out var val))
-                    return val.Name.ToUpper();
+            return gameMode.Name.ToUpperInvariant();
         }
         return orig_GetModeName(mode);
     }

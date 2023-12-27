@@ -1,7 +1,6 @@
 using System;
 using System.Collections;
 using Mono.Cecil;
-using Mono.Cecil.Cil;
 using Monocle;
 using MonoMod;
 using MonoMod.Cil;

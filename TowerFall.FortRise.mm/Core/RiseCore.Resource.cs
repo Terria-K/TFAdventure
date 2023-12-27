@@ -5,6 +5,8 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Ionic.Zip;
+using Monocle;
+using TowerFall;
 
 namespace FortRise;
 
@@ -16,6 +18,7 @@ public partial class RiseCore
     public sealed class ResourceTypeAssembly {}
     public sealed class ResourceTypeXml {}
     public sealed class ResourceTypeJson {}
+    public sealed class ResourceTypeHJson {}
     public sealed class ResourceTypeOel {}
     public sealed class ResourceTypeQuestTowerFolder {}
     public sealed class ResourceTypeDarkWorldTowerFolder {}
@@ -29,6 +32,7 @@ public partial class RiseCore
     public sealed class ResourceTypeWavFile {}
     public sealed class ResourceTypeOggFile {}
     public sealed class ResourceTypeAudioEngine {}
+    public sealed class ResourceTypeEffects {}
 
     internal static HashSet<string> BlacklistedExtension = new() {
         ".csproj", ".cs", ".md", ".toml", ".aseprite", ".ase", ".xap"
@@ -42,11 +46,17 @@ public partial class RiseCore
         "packer/"
     };
 
+    private static char[] SplitSeparator = new char[1] { '/' };
+
+    /// <summary>
+    /// A class that contains a path and stream to your resource works both on folder and zip. 
+    /// </summary>
     public abstract class Resource 
     {
         public string FullPath;
         public string Path;
         public string Root;
+        public string RootPath => Root + Path;
         public List<Resource> Childrens = new();
         public ModResource Source;
         public Type ResourceType;
@@ -167,6 +177,10 @@ public partial class RiseCore
             {
                 ResourceType = typeof(ResourceTypeXml);
             }
+            else if (path.EndsWith(".fxb")) 
+            {
+                ResourceType = typeof(ResourceTypeEffects);
+            }
             else if (Childrens.Count != 0) 
             {
                 ResourceType = typeof(ResourceTypeFolder);
@@ -181,6 +195,10 @@ public partial class RiseCore
                 if (path.EndsWith(".json")) 
                 {
                     ResourceType = typeof(ResourceTypeJson);
+                }
+                else if (path.EndsWith(".hjson")) 
+                {
+                    ResourceType = typeof(ResourceTypeHJson);
                 }
                 else if (path.EndsWith(".oel")) 
                 {
@@ -391,7 +409,7 @@ public partial class RiseCore
                     var zipResource = new ZipResource(this, file, prefix + file, entry);
                     Add(file, zipResource);
                     folders.Add(file, zipResource);
-                    var split = file.Split('/');
+                    var split = file.Split(SplitSeparator);
                     Array.Resize(ref split, split.Length - 1);
                     var newPath = CombineAllPath(split);
                     if (folders.TryGetValue(newPath, out var resource)) 
@@ -429,12 +447,14 @@ public partial class RiseCore
 
     public class AdventureGlobalLevelResource : FolderModResource
     {
-        public AdventureGlobalLevelResource() : base("Content/Mod/Adventure")
+        public AdventureGlobalLevelResource() : base(Path.Combine(Calc.LOADPATH, "Mod", "Adventure"))
         {
         }
 
         public override void Lookup(string prefix)
         {
+            if (!Directory.Exists(FolderDirectory))
+                Directory.CreateDirectory(FolderDirectory);
             var files = Directory.GetFiles(FolderDirectory);
             for (int i = 0; i < files.Length; i++) 
             {
@@ -579,6 +599,11 @@ public partial class RiseCore
             }
         }
 
+        public static bool TryGetValue(string path, out RiseCore.Resource res) 
+        {
+            return TreeMap.TryGetValue(path, out res);
+        }
+
         public static bool IsExist(string path) 
         {
             return TreeMap.ContainsKey(path);
@@ -587,6 +612,16 @@ public partial class RiseCore
         public static bool IsExist(Resource resource, string path) 
         {
             return TreeMap.ContainsKey(resource.Root + path);
+        }
+
+        public static void LoopThroughModsContent(Action<FortContent> modsAction) 
+        {
+            foreach (var mod in ModResources) 
+            {
+                if (mod.Content == null)
+                    continue;
+                modsAction(mod.Content);
+            }
         }
 
         public static async Task DumpAll() 
@@ -599,7 +634,7 @@ public partial class RiseCore
                 using TextWriter tw = new StreamWriter(file);
 
                 tw.WriteLine("FORTRISE RESOURCE DUMP");
-                tw.WriteLine("VERSION 4.1.0.0");
+                tw.WriteLine("VERSION 4.7.0.0");
                 tw.WriteLine("==============================");
                 foreach (var globalResource in TreeMap) 
                 {
@@ -628,11 +663,35 @@ public partial class RiseCore
                         await DumpResource(resource, line + "\t");
                     }
                 }
-            }
+
+
+                // Dump Atlases
+                DumpAtlas("Atlas", TFGame.Atlas);
+                DumpAtlas("MenuAtlas", TFGame.MenuAtlas);
+                DumpAtlas("BGAtlas", TFGame.BGAtlas);
+                if (GameData.DarkWorldDLC)
+                    DumpAtlas("BossAtlas", TFGame.BossAtlas);
+                }
             catch (Exception e) 
             {
                 Logger.Error("[DUMPRESOURCE]" + e.ToString());
                 throw;
+            }
+        }
+
+        private static void DumpAtlas(string name, Atlas atlas) 
+        {
+            foreach (KeyValuePair<string, Subtexture> texturePair in atlas.SubTextures) 
+            {
+                string key = texturePair.Key;
+                Subtexture value = texturePair.Value;
+
+                using var texture = value.GetTexture2DFromSubtexture();
+                var path = $"DUMP/{name}/{key}.png";
+                if (!Directory.Exists(Path.GetDirectoryName(path)))
+                    Directory.CreateDirectory(Path.GetDirectoryName(path));
+                using var file = File.Create(path);
+                texture.SaveAsPng(file, texture.Width, texture.Height);
             }
         }
     }

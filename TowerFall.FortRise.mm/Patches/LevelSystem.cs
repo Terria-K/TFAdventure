@@ -9,26 +9,6 @@ public class patch_LevelSystem : LevelSystem
     [MonoModIgnore]
     public extern override XmlElement GetNextRoundLevel(MatchSettings matchSettings, int roundIndex, out int randomSeed);
 
-    public extern TilesetData orig_GetTileset();
-
-    public override TilesetData GetTileset() 
-    {
-        if (RiseCore.GameData.Tilesets.TryGetValue(Theme.Tileset, out var tileset)) 
-            return tileset;
-        
-        return orig_GetTileset();
-    }
-
-    public extern TilesetData orig_GetBGTileset();
-
-    public override TilesetData GetBGTileset() 
-    {
-        if (RiseCore.GameData.Tilesets.TryGetValue(Theme.BGTileset, out var tileset)) 
-            return tileset;
-        
-        return orig_GetBGTileset();
-    }
-
     [MonoModReplace]
     public override Background GetBackground(Level level)
     {

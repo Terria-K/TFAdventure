@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using FortRise.Adventure;
+using Microsoft.Xna.Framework;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Monocle;
@@ -14,6 +15,7 @@ namespace TowerFall
     public class patch_MapScene : MapScene
     {
         private static int lastRandomVersusTower;
+        private Tween cameraTween;
         private bool adventureLevels;
         private float crashDelay;
         private Counter counterDelay;
@@ -47,6 +49,7 @@ namespace TowerFall
 
         [MonoModIgnore]
         [PatchMapSceneBegin]
+        [FixClampCamera]
         [PreFixing("TowerFall.MapScene", "System.Void InitializeCustoms()")]
         public extern void orig_Begin();
 
@@ -82,9 +85,8 @@ namespace TowerFall
             session.StartGame();
         }
 
-        // This is a hack to fix System.TypeLoadException on MacOS and Linux
         [MonoModReplace]
-        [MonoModPatch("DarkWorldIntroSequence")]
+        [MonoModPatch("DarkWorldIntroSequence")] // This is a hack to fix System.TypeLoadException on MacOS and Linux
         private IEnumerator DarkWorldIntroSequence_Patch() 
         {
             int num = 0;
@@ -272,6 +274,7 @@ namespace TowerFall
             base.Update();
         }
 
+        [FixClampCamera]
         private extern void orig_Update();
 
         public override void Update()
@@ -306,6 +309,24 @@ namespace TowerFall
                     continue;    
                 (mapButton as patch_MapButton).TweenOutAndRemoved();
             }
+        }
+
+        public static Vector2 FixedClampCamera(Vector2 position, patch_MapScene map) 
+        {
+			return new Vector2(
+                MathHelper.Clamp(position.X, 160f, map.Renderer.GetInstanceWidth() - 160), 
+                MathHelper.Clamp(position.Y, 120f, map.Renderer.GetInstanceHeight() - 120));
+        }
+
+        [MonoModReplace]
+        public void ScrollToPosition(Vector2 position) 
+        {
+            Vector2 start = Camera.Position;
+            cameraTween = Tween.Create(Tween.TweenMode.Oneshot, Ease.CubeOut, 30, true);
+            cameraTween.OnUpdate = t =>
+            {
+                Camera.Position = Vector2.Lerp(start, FixedClampCamera(position, this), t.Eased);
+            };
         }
 
         [MonoModPatch("<>c")]
@@ -365,8 +386,22 @@ namespace MonoMod
     [MonoModCustomMethodAttribute(nameof(MonoModRules.PatchMapSceneBegin))]
     internal class PatchMapSceneBegin : Attribute {}
 
+    [MonoModCustomMethodAttribute(nameof(MonoModRules.FixClampCamera))]
+    internal class FixClampCamera : Attribute {}
+
     internal static partial class MonoModRules 
     {
+        public static void FixClampCamera(ILContext ctx, CustomAttribute attrib) 
+        {
+            var method = ctx.Method.DeclaringType.FindMethod("Microsoft.Xna.Framework.Vector2 FixedClampCamera(Microsoft.Xna.Framework.Vector2,TowerFall.MapScene)");
+
+            var cursor = new ILCursor(ctx);
+
+            cursor.GotoNext(instr => instr.MatchCall("TowerFall.MapScene", "ClampCamera"));
+            cursor.Next.Operand = method;
+
+            cursor.Emit(OpCodes.Ldarg_0);
+        }
 
         public static void PatchMapSceneBegin(ILContext ctx, CustomAttribute attrib) 
         {

@@ -1,4 +1,5 @@
 using System;
+using FortRise;
 using FortRise.Adventure;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
@@ -75,6 +76,10 @@ namespace TowerFall
 					stats.RegisterVersusTowerSelection(MatchSettings.LevelSystem.ID.X);
 				}
 				SessionStats.MatchesPlayed++;
+                if (MatchSettings.IsCustom && GameModeRegistry.TryGetGameMode(MatchSettings.CurrentModeName, out var mode)) 
+                {
+                    mode.StartGame(this);
+                }
 			}
 			if (MatchSettings.Mode == patch_Modes.DarkWorld)
 			{
@@ -105,6 +110,10 @@ namespace TowerFall
                     stats.VersusTowerPlays[MatchSettings.LevelSystem.ID.X] += 1UL;
                 }
 				SessionStats.MatchesPlayed++;
+                if (MatchSettings.IsCustom && GameModeRegistry.TryGetGameMode(MatchSettings.CurrentModeName, out var mode)) 
+                {
+                    mode.StartGame(this);
+                }
 			}
 			if (MatchSettings.Mode == patch_Modes.DarkWorld)
 			{

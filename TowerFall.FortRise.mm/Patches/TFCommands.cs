@@ -51,6 +51,18 @@ public static partial class patch_TFCommands
             portals.Shuffle<QuestSpawnPortal>(); 
             portals[0].AppearAndSpawn(args[0]);
         });
+        commands.RegisterCommand("dump_oel", args => 
+        {
+            if (Engine.Instance.Scene is not patch_Level level) 
+            {
+				commands.Log("Command can only be used during gameplay!");
+                return;
+            }
+            string name = "dumplevel.oel";
+            if (args.Length > 0)
+                name = args[0] + ".oel";
+            level.XML.OwnerDocument.Save("DUMP/" + name);
+        });
         commands.RegisterCommand("logtags", args => 
         {
             Engine.Instance.Scene.LogTags();

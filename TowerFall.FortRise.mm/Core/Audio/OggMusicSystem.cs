@@ -17,7 +17,19 @@ public class OggMusicSystem : IMusicSystem
     {
         Stop(AudioStopOptions.Immediate);
 
-        current = patch_Audio.TrackMap[name].Create();
+        if (patch_Audio.TryGetTrackMap(name, out var info)) 
+        {
+            current = info.Create();
+            current.Looping = true;
+            current.Play();
+            return;
+        }
+        Logger.Error($"[OGG Music System] No audio file named '{name}' exists on the Music Folder"); 
+    }
+
+    public void Play(TrackInfo trackInfo)
+    {
+        current = trackInfo.Create();
         current.Looping = true;
         current.Play();
     }

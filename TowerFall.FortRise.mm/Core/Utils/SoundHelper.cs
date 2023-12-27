@@ -6,6 +6,8 @@ using Monocle;
 
 namespace FortRise;
 
+
+[Obsolete("This will be removed in FortRise 5")]
 public static class SoundHelper 
 {
     public static Dictionary<string, SoundEffectInstance> StoredInstance = new();

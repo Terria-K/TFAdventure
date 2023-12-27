@@ -1,0 +1,5 @@
+name: FortRise.FortTemplate
+author: authorIsMe
+version: 1.0.0
+description: My first mod
+dll: FortRise.FortTemplate.dll

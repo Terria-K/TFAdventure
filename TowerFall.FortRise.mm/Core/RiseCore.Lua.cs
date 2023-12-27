@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
 using Microsoft.Xna.Framework;
 using NLua;
 
@@ -12,10 +14,96 @@ public static partial class RiseCore
     public static class Lua 
     {
         public static NLua.Lua Context { get; private set; }
+        public static Action<string> Require => require;
+        private static Action<string> require;
+
+        public static Action<string> LoadAssembly => loadAssembly;
+        private static Action<string> loadAssembly;
+
+        public static Action<string, string> AddToImport => addToImport;
+        private static Action<string, string> addToImport;
+
+        public static Func<string, string[]> ResourceTree => (name) => {
+            if (string.IsNullOrEmpty(name))
+                return null;
+            
+            name = name.Replace(".", "/");
+            var path = name;
+            if (Path.GetExtension(path) != ".lua")
+                path += ".lua";
+
+            if (RiseCore.ResourceTree.TryGetValue(path, out var res)) 
+            {
+                using var s = res.Stream;
+                using TextReader sr = new StreamReader(s);
+                var data = sr.ReadToEnd();
+
+                return new string[] { path, data };
+            }
+            return null;
+        };
 
         internal static void Initialize() 
         {
-            Context = new NLua.Lua();
+            try 
+            {
+                Context = new NLua.Lua();
+            }
+            catch (Exception e)
+            {
+                Logger.Error("[LUA] Failed to load Lua context. Lua mods might not work!");
+                Logger.Error(e);
+                return;
+            }
+            var assembly = typeof(Lua).Assembly;
+            using Stream luaStream = assembly.GetManifestResourceStream("Content\\Scripts\\fort.lua");
+            using TextReader sr = new StreamReader(luaStream);
+            var texts = sr.ReadToEnd();
+            var table = Context.DoString(texts, "fort");
+            require = s => (table[0] as NLua.LuaFunction).Call(s);
+            loadAssembly = s => (table[1] as NLua.LuaFunction).Call(s);
+            addToImport = (s1, s2) => (table[2] as NLua.LuaFunction).Call(s1, s2);
+
+            (table[3] as NLua.LuaFunction).Call(ResourceTree);
+
+            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies()) 
+            {
+                AsmLoad(asm);
+            }
+        }
+
+        public static void AsmLoad(Assembly asm) 
+        {
+            if (loadAssembly == null) { return; }
+
+            try 
+            {
+                LoadAssembly(asm.FullName);
+            }
+            catch {}
+
+            var caches = new HashSet<string>();
+
+            foreach (var type in asm.GetTypes())
+            {
+                if (type.Namespace is null || caches.Contains(type.Namespace))
+                    continue;
+
+                string luanamespace;
+                {
+                    Span<char> nameSpan = stackalloc char[type.Namespace.Length + 1];
+                    var ns = type.Namespace.AsSpan();
+                    nameSpan[0] = '#';
+                    for (int i = 0; i < ns.Length; i++) 
+                    {
+                        nameSpan[i + 1] = char.ToLowerInvariant(ns[i]);
+                    }
+                    luanamespace = nameSpan.ToString();
+                }
+
+                caches.Add(type.Namespace);
+                addToImport(luanamespace, type.Namespace);
+            }
         }
 
         public static NLua.LuaFunction LoadScript(string path) 

@@ -11,6 +11,11 @@ namespace TowerFall;
 public class patch_DarkWorldLevelSystem : DarkWorldLevelSystem
 {
     private int startLevel;
+    public int StartLevel 
+    {
+        get => startLevel;
+        set => startLevel = value;
+    }
     public patch_DarkWorldLevelSystem(DarkWorldTowerData tower) : base(tower)
     {
     }
@@ -67,6 +72,7 @@ public class patch_DarkWorldLevelSystem : DarkWorldLevelSystem
                 }
             }
             
+            // Load vanilla levels instead
             using Stream stream = File.OpenRead(levelFile);
             return patch_Calc.LoadXML(stream)["level"];
         }
@@ -81,25 +87,12 @@ public class patch_DarkWorldLevelSystem : DarkWorldLevelSystem
 
     [MonoModIgnore]
     public extern patch_DarkWorldTowerData.patch_LevelData GetLevelData(DarkWorldDifficulties difficulty, int roundIndex);
+}
 
-    public override TilesetData GetBGTileset()
+public static class DarkWorldLevelSystemExt 
+{
+    public static int GetStartLevel(this DarkWorldLevelSystem system) 
     {
-        // TODO CustomBGTileset
-        // if (patch_SaveData.AdventureActive) 
-        // {
-        //     if (patch_GameData.CustomTilesets.TryGetValue(Theme.BGTileset, out var val))
-        //         return val;
-        // }
-        return base.GetBGTileset();
-    }
-
-    public override TilesetData GetTileset()
-    {
-        // if (patch_SaveData.AdventureActive) 
-        // {
-        //     if (patch_GameData.CustomTilesets.TryGetValue(Theme.Tileset, out var val))
-        //         return val;
-        // }
-        return base.GetTileset();
+        return ((patch_DarkWorldLevelSystem)system).StartLevel;
     }
 }

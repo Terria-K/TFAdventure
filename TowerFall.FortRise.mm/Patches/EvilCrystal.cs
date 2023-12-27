@@ -1,6 +1,4 @@
-using System.Collections;
 using Microsoft.Xna.Framework;
-using Monocle;
 using MonoMod;
 
 namespace TowerFall;

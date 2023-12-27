@@ -14,7 +14,7 @@ public class DiscordComponent : GameComponent
     private Discord.Activity NextPresence;
     private bool dirty;
 
-    public const string FortRiseIcon = "https://i.imgur.com/jMyu0Hl.png";
+    private const string FortRiseIcon = "https://i.imgur.com/jMyu0Hl.png";
 
     public DiscordComponent(Game game) : base(game)
     {
@@ -88,7 +88,7 @@ public class DiscordComponent : GameComponent
             State = "Enemies: " + logic.GauntletCounter.Amount + " | " + "Players: " + TFGame.PlayerAmount
         };
         NextPresence.Assets.LargeText = "FortRise";
-        NextPresence.Assets.LargeImage = "https://i.imgur.com/nNc3UG2.png";
+        NextPresence.Assets.LargeImage = FortRiseIcon;
         NextPresence.Assets.SmallImage = GetQuestDifficulty(logic.Session.MatchSettings);
         NextPresence.Assets.SmallText = "TowerFall";
 
@@ -110,7 +110,7 @@ public class DiscordComponent : GameComponent
             State = "Players: " + TFGame.PlayerAmount
         };
         NextPresence.Assets.LargeText = "FortRise";
-        NextPresence.Assets.LargeImage = "https://i.imgur.com/nNc3UG2.png";
+        NextPresence.Assets.LargeImage = FortRiseIcon;
         NextPresence.Assets.SmallImage = GetQuestDifficulty(control.Level.Session.MatchSettings);
         NextPresence.Assets.SmallText = "Quest";
 
@@ -124,13 +124,13 @@ public class DiscordComponent : GameComponent
         };
 
         NextPresence.Assets.LargeText = "FortRise";
-        NextPresence.Assets.LargeImage = "https://i.imgur.com/nNc3UG2.png";
+        NextPresence.Assets.LargeImage = FortRiseIcon;
         NextPresence.Assets.SmallImage = GetMap(scene.Mode);
         NextPresence.Assets.SmallText = scene.Mode.ToString();
 
         dirty = true;
 
-        string GetMap(MainMenu.RollcallModes mode) 
+        static string GetMap(MainMenu.RollcallModes mode) 
         {
             return mode switch 
             {
@@ -155,6 +155,16 @@ public class DiscordComponent : GameComponent
         NextPresence.Assets.SmallText = "TowerFall";
 
         dirty = true;
+    }
+
+    public static void ChangePresence(Discord.Activity activity) 
+    {
+        if (Instance == null) 
+        {
+            Logger.Error("[Discord Presence] Discord Game SDK is not initialized yet.");
+            return;
+        }
+        Instance.NextPresence = activity;
     }
 
     private void OnGameExit(object sender, EventArgs e)
@@ -255,7 +265,6 @@ public class DiscordComponent : GameComponent
                 levelID = levelID.Substring(index + 1);
             }
 
-            var matchStats = session.MatchStats;
             ulong totalKills = 0;
             ulong totalDeaths = 0;
 
@@ -276,7 +285,7 @@ public class DiscordComponent : GameComponent
             break;
         case QuestLevelSystem questSystem:
         {
-            var levelID = (session.MatchSettings.LevelSystem as QuestLevelSystem).QuestTowerData.GetLevelID() ?? "Official Level";
+            var levelID = questSystem.QuestTowerData.GetLevelID() ?? "Official Level";
             var index = levelID.IndexOf("/");
             if (index != -1) 
             {
@@ -293,7 +302,7 @@ public class DiscordComponent : GameComponent
             break;
         case TrialsLevelSystem trialsSystem:
         {
-            var trialTowerData = (session.MatchSettings.LevelSystem as TrialsLevelSystem).TrialsLevelData;
+            var trialTowerData = trialsSystem.TrialsLevelData;
             int typeCompletion = 0;
             string bestTime = "";
             if (trialTowerData.IsOfficialLevelSet()) 
@@ -341,7 +350,7 @@ public class DiscordComponent : GameComponent
         dirty = true;
     }
 
-    private string GetTrialTime(int typeCompletion) 
+    private static string GetTrialTime(int typeCompletion) 
     {
         return typeCompletion switch 
         {
@@ -352,14 +361,14 @@ public class DiscordComponent : GameComponent
         };
     }
 
-    private string GetQuestDifficulty(MatchSettings settings) 
+    private static string GetQuestDifficulty(MatchSettings settings) 
     {
         if (settings.QuestHardcoreMode)
             return "hardcore";
         return "normal";
     }
 
-    private string GetDarkWorldDifficulty(DarkWorldDifficulties difficulty) 
+    private static string GetDarkWorldDifficulty(DarkWorldDifficulties difficulty) 
     {
         return difficulty switch 
         {

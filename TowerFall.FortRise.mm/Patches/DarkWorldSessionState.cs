@@ -1,5 +1,4 @@
 using FortRise.Adventure;
-using Monocle;
 using MonoMod;
 
 namespace TowerFall;

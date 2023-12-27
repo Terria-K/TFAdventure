@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Microsoft.Xna.Framework;
 using Monocle;
 using TowerFall;
@@ -473,12 +474,19 @@ public class TextContainer : MenuItem
         public string[] Options;
         public SelectionOption(string text, string[] options) : base(text)
         {
-            Options = options;
+            Options = options.Select(x => x.ToUpperInvariant()).ToArray();
+        }
+
+        public SelectionOption(string text, string[] options, int start) : base(text)
+        {
+            Options = options.Select(x => x.ToUpperInvariant()).ToArray();
+            Value.Item2 = start;
+            Value.Item1 = Options[Value.Item2];
         }
 
         public override bool CanLeft => Value.Item2 > 0;
 
-        public override bool CanRight => Value.Item2 < Options.Length;
+        public override bool CanRight => Value.Item2 < Options.Length - 1;
 
         public override void OptionLeft()
         {

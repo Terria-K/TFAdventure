@@ -1,6 +1,5 @@
+using System;
 using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 using System.Reflection;
 using System.Xml;
 using FortRise;
@@ -39,6 +38,10 @@ public class patch_DarkWorldTowerData : DarkWorldTowerData
         {
         }
 
+        public patch_LevelData(Hjson.JsonValue json, Dictionary<string, List<EnemyData>> enemySets) : base(null, enemySets)
+        {
+        }
+
         public patch_LevelData(LuaTable table, Dictionary<string, List<EnemyData>> enemySets) : base(null, enemySets)
         {
         }
@@ -58,6 +61,84 @@ public class patch_DarkWorldTowerData : DarkWorldTowerData
             {
                 CustomBossName = xml.ChildText("customboss");
                 LevelMode = DarkWorldTowerData.LevelData.BossModes.Boss;
+            }
+        }
+
+        [MonoModConstructor]
+        public void ctor(Hjson.JsonValue json, Dictionary<string, List<DarkWorldTowerData.EnemyData>> enemySets) 
+        {
+            HJsonCtor(json, enemySets);
+            if (json.ContainsKey("customboss")) 
+            {
+                CustomBossName = json["customboss"];
+                LevelMode = DarkWorldTowerData.LevelData.BossModes.Boss;
+            }
+        }
+
+        public void HJsonCtor(Hjson.JsonValue json, Dictionary<string, List<DarkWorldTowerData.EnemyData>> enemySets) 
+        {
+            this.File = json.GetJsonValueOrNull("file");
+            this.Difficulty = json.GetJsonValueOrNull("difficulty");
+            this.Waves = json.GetJsonValueOrNull("waves") ?? 3;
+            enemySets.TryGetValue(json.GetJsonValueOrNull("enemySet") ?? string.Empty, out this.EnemySet);
+            this.DelayMultiplier = json.GetJsonValueOrNull("delayMultiplier") ?? 1f;
+            this.TreasureData = new List<Pickups>[4];
+            for (int i = 0; i < 4; i++)
+            {
+                this.TreasureData[i] = new List<Pickups>();
+            }
+            if (json.ContainsKey("treasure") && json.TryGetValue("treasure", out var arrOrString))
+            {
+                if (arrOrString.ToValue() is string jsonStr) 
+                {
+                    AddTreasure(jsonStr);
+                }
+                else 
+                {
+                    foreach (string str in arrOrString) 
+                    {
+                        AddTreasure(str);
+                    }
+                }
+            }
+            if (json.TryGetValue("boss", out var boss))
+            {
+                this.LevelMode = DarkWorldTowerData.LevelData.BossModes.Boss;
+                this.BossID = boss.GetJsonValueOrNull("boss") ?? 0;
+                return;
+            }
+            this.LevelMode = DarkWorldTowerData.LevelData.BossModes.Normal;
+
+            
+        }
+
+        private void AddTreasure(string treasure) 
+        {
+            var treasureSpan = treasure.AsSpan();
+            int inc = 0;
+            int dec = 0;
+            while (treasureSpan[0] == '+') 
+            {
+                treasureSpan = treasureSpan.Slice(1);
+                inc++;
+            }
+            while (treasureSpan[0] == '-') 
+            {
+                treasureSpan = treasureSpan.Slice(1);
+                dec++;
+            }
+            
+            if (dec == 0) 
+            {
+                dec = 4;
+            }
+            Pickups pickups = Calc.StringToEnum<Pickups>(treasureSpan.ToString());
+            for (int k = 0; k < 4; k++)
+            {
+                if (k >= inc - 1 && k <= dec - 1)
+                {
+                    this.TreasureData[k].Add(pickups);
+                }
             }
         }
 
@@ -89,31 +170,7 @@ public class patch_DarkWorldTowerData : DarkWorldTowerData
                 foreach (KeyValuePair<object, object> obj in csv) 
                 {
                     var str = (string)obj.Value;
-                    int increment = 0;
-                    int decrement = 0;
-                    while (str[0] == '+') 
-                    {
-                        str = str.Substring(1);
-                        increment++;
-                    }
-
-                    while (str[0] == '-') 
-                    {
-                        str = str.Substring(1);
-                        decrement++;
-                    }
-                    if (decrement == 0)
-                    {
-                        decrement = 4;
-                    }
-                    Pickups pickups = Calc.StringToEnum<Pickups>(str);
-                    for (int k = 0; k < 4; k++)
-                    {
-                        if (k >= increment - 1 && k <= decrement - 1)
-                        {
-                            this.TreasureData[k].Add(pickups);
-                        }
-                    }
+                    AddTreasure(str);
                 }
             }
             if (table.TryGetTable("boss", out var boss))
@@ -165,6 +222,12 @@ public class patch_DarkWorldTowerData : DarkWorldTowerData
         {
         }
 
+        public patch_EnemyData(Hjson.JsonValue json) 
+            // This is basically useless
+            : base(new XmlDocument().GetElementById("null"))
+        {
+        }
+
         public patch_EnemyData(LuaTable table) 
             // This is basically useless
             : base(new patch_EnemyData(new XmlDocument().GetElementById("null")))
@@ -180,6 +243,17 @@ public class patch_DarkWorldTowerData : DarkWorldTowerData
             Delay = xml.ChildInt("delay");
             Difficulty = xml.ChildInt("difficulty");
             Weight = xml.ChildFloat("weight");
+        }
+
+        [MonoModConstructor]
+        [MonoModReplace]
+        public void ctor(Hjson.JsonValue json) 
+        {
+            Enemy = json.GetJsonValueOrNull("enemy");
+            json.TryParseEnum<PortalTypes>("type", out Type);
+            Delay = json.GetJsonValueOrNull("delay");
+            Difficulty = json.GetJsonValueOrNull("difficulty");
+            Weight = json.GetJsonValueOrNull("weight");
         }
 
         [MonoModConstructor]

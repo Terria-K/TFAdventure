@@ -46,11 +46,19 @@ public class patch_Atlas : Atlas
         foreach (var resource in RiseCore.ResourceTree.TreeMap.Values
             .Where(x => x.Path.Contains(path))) 
         {
-            atlas.MoveToAtlas(resource);
+            atlas.Digest(resource);
         }
     }
 
-    public void MoveToAtlas(RiseCore.Resource resource) 
+    public static void MergeAtlas(patch_Atlas atlas, Atlas destination, string prefix) 
+    {
+        foreach (var subTexture in atlas.SubTextures) 
+        {
+            destination.SubTextures.Add(prefix + subTexture.Key, subTexture.Value);
+        }
+    }
+
+    public void Digest(RiseCore.Resource resource) 
     {
         var pngPath = resource.Root + resource.Path;
         if (Path.GetExtension(pngPath) != ".png")
@@ -152,7 +160,7 @@ public class patch_Atlas : Atlas
     public extern bool Contains(string name);
 
 
-    [Obsolete("Use the AtlasExt.CreateAtlas instead")]
+    [Obsolete("Use the Content.LoadAtlas from your module instead")]
     public static patch_Atlas Create(string xmlPath, string imagePath, bool load, ContentAccess access = ContentAccess.Root)
     {
         switch (access) 
@@ -229,12 +237,12 @@ public static class AtlasExt
     }
 
     [Obsolete("Use AtlasExt.CreateAtlas(this FortContent content, string xmlPath, string imagePath, ContentAccess access) instead.")]
-    public static patch_Atlas CreateAtlas(this FortContent content, string xmlPath, string imagePath, bool load, ContentAccess access = ContentAccess.Root)
+    public static patch_Atlas CreateAtlas(FortContent content, string xmlPath, string imagePath, bool load, ContentAccess access = ContentAccess.Root)
     {
         return CreateAtlas(content, xmlPath, imagePath, access);
     }
 
-    public static patch_Atlas CreateAtlas(this FortContent content, string xmlPath, string imagePath, ContentAccess access = ContentAccess.Root)
+    public static patch_Atlas CreateAtlas(FortContent content, string xmlPath, string imagePath, ContentAccess access = ContentAccess.Root)
     {
         switch (access) 
         {
@@ -251,29 +259,29 @@ public static class AtlasExt
                 }
                 using var xmlStream = content[xmlPath].Stream;
                 using var imageStream = content[imagePath].Stream;
-                return AtlasExt.CreateAtlas(content, xmlStream, imageStream);
+                return AtlasExt.CreateAtlas(xmlStream, imageStream);
             }
         }
         using var rootXmlStream = File.OpenRead(xmlPath);
         using var rootImageStream = File.OpenRead(imagePath);
-        return AtlasExt.CreateAtlas(content, rootXmlStream, rootImageStream);
+        return AtlasExt.CreateAtlas(rootXmlStream, rootImageStream);
     }
 
-    public static patch_Atlas CreateAtlas(this FortContent content, Stream xmlStream, Stream imageStream)
+    public static patch_Atlas CreateAtlas(Stream xmlStream, Stream imageStream)
     {
         patch_Atlas atlas = AtlasReader.Read(xmlStream, ".xml");
         atlas.LoadStream(imageStream);
         return atlas;
     }
 
-    public static patch_Atlas CreateAtlas(this FortContent content, Stream xmlStream, Stream imageStream, string ext)
+    public static patch_Atlas CreateAtlas(Stream xmlStream, Stream imageStream, string ext)
     {
         patch_Atlas atlas = AtlasReader.Read(xmlStream, ext);
         atlas.LoadStream(imageStream);
         return atlas;
     }
 
-    public static patch_Atlas CreateAtlasJson(this FortContent content, Stream jsonStream, Stream imageStream)
+    public static patch_Atlas CreateAtlasJson(Stream jsonStream, Stream imageStream)
     {
         patch_Atlas atlas = AtlasReader.Read(jsonStream, ".json");
         atlas.LoadStream(imageStream);

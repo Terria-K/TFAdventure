@@ -1,7 +1,6 @@
+#pragma warning disable CS0618
 using System;
 using System.Collections.Generic;
-using System.Globalization;
-using System.Linq;
 using FortRise;
 using Monocle;
 using MonoMod;
@@ -10,120 +9,130 @@ namespace TowerFall;
 
 public class patch_MatchVariants : MatchVariants 
 {
-    private Dictionary<string, Variant> customVariants;
-    public IReadOnlyDictionary<string, Variant> CustomVariants => customVariants;
+    internal Dictionary<string, Variant> InternalCustomVariants;
+    public IReadOnlyDictionary<string, Variant> CustomVariants => InternalCustomVariants;
 
 
     private List<Variant> canRandoms;
-
-
-    private List<Variant> customs;
     [MonoModIgnore]
     public static int Count { get; private set; }
+    internal VariantManager manager;
 
     public void orig_ctor(bool noPerPlayer = false) {}
 
     [MonoModConstructor]
     public void ctor(bool noPerPlayer = false) 
     {
-        customVariants = new();
-        customs = new();
+        InternalCustomVariants = new();
 
         orig_ctor(noPerPlayer);
+
+        TempVariantHolder.TempCustom = new Dictionary<string, bool>();
+        manager = new VariantManager(this);
         foreach (var mod in RiseCore.InternalFortModules) 
         {
+            manager.SetContext(mod.Meta);
+            mod.OnVariantsRegister(manager, noPerPlayer);
             mod.OnVariantsRegister(this, noPerPlayer);
         }
 
+
         int oldLength = Variants.Length;
-        Array.Resize(ref Variants, customs.Count + Variants.Length);
+        Array.Resize(ref Variants, manager.TotalCustomVariantsAdded + Variants.Length);
         int count = 0;
-        for (int i = oldLength; i < Variants.Length; i++) 
+        foreach (var key in manager.ToAdd.Keys) 
         {
-            Variants[i] = customs[count];
-            count++;
+            var list = manager.ToAdd[key]; 
+            for (int i = oldLength; i < oldLength + list.Count; i++) 
+            {
+                Variants[i] = list[count];
+                count++;
+            }
+            oldLength += count;
+            count = 0;
         }
+
+        foreach (var random in manager.CanRandoms)
+            canRandoms.Add(random);
         Count = Variants.Length;
+        manager.Dispose();
     }
 
-
+    [Obsolete("Use FortRise.VariantManager.AddVariant")]
     public Variant AddVariant(string variantName, VariantInfo info, VariantFlags flags, bool noPerPlayer) 
     {
-        return AddVariant(variantName, GetVariantIconFromName(variantName, info.VariantAtlas), info, flags, noPerPlayer);
+        return AddVariant(
+            variantName, 
+            VariantManager.GetVariantIconFromName(variantName, info.VariantAtlas), 
+            info,
+            flags,
+            noPerPlayer
+        );
     }
 
+
+    [Obsolete("Use FortRise.VariantManager.AddVariant")]
     public Variant AddVariant(string variantName, Subtexture variantIcon, VariantInfo info, VariantFlags flags, bool noPerPlayer) 
     {
-        TempVariantHolder.TempCustom ??= new Dictionary<string, bool>();
-        var list = Variants.ToList();
-        Pickups[] itemExclusions = info.Exclusions;
-        bool perPlayer = flags.HasFlag(VariantFlags.PerPlayer) && !noPerPlayer;
-        string description = info.Description;
-        string header = info.Header;
-        bool scrollEffect = flags.HasFlag(VariantFlags.ScrollEffect);
-        bool hidden = flags.HasFlag(VariantFlags.Hidden);
-        bool flag = flags.HasFlag(VariantFlags.CanRandom);
-        bool tournamentRule1v = flags.HasFlag(VariantFlags.TournamentRule1v1);
-        bool tournamentRule2v = flags.HasFlag(VariantFlags.TournamentRule2v2);
-        bool unlisted = flags.HasFlag(VariantFlags.Unlisted);
-        bool darkWorldDLC = flags.HasFlag(VariantFlags.DarkWorldDLC);
-        int coopValue = 0;
-        if (flags.HasFlag(VariantFlags.CoopCurses)) 
+         var fortRiseInfo = new FortRise.CustomVariantInfo(
+            variantName, 
+            variantIcon,
+            info.Header ?? manager.CurrentContext,
+            (FortRise.CustomVariantFlags)(int)flags,
+            info.Exclusions) 
         {
-            coopValue = -1;
-        }
-        else if (flags.HasFlag(VariantFlags.CoopBlessing))
-        {
-            coopValue = 1;
-        }
-        var title = GetCustomVariantTitle(variantName);
-        var variant = new Variant(variantIcon, title, description, itemExclusions, perPlayer, 
-            header, null, scrollEffect, hidden, flag, tournamentRule1v, 
-            tournamentRule2v, unlisted, darkWorldDLC, coopValue);
-        customs.Add(variant);
-        customVariants.Add(variantName, variant);
-        if (flag)
-            canRandoms.Add(variant);
-
-        if (!TempVariantHolder.TempCustom.ContainsKey(variantName))
-            TempVariantHolder.TempCustom.Add(variantName, false);
-        return variant;
+            Description = info.Description
+        };
+        return manager.AddVariant(fortRiseInfo, noPerPlayer);
     }
 
-
+    [Obsolete("Use VariantManager.GetVariantIconFromName")]
     public static Subtexture GetVariantIconFromName(string variantName, Atlas atlas)
     {
-        return atlas["variants/" + variantName[0].ToString().ToLowerInvariant() + variantName.Substring(1)];
+        return VariantManager.GetVariantIconFromName(variantName, atlas);
     }
 
+    [Obsolete("Use VariantManager.CreateLinks")]
     public void CreateCustomLinks(params Variant[] variants)
     {
-        for (int i = 0; i < variants.Length; i++)
-        {
-            variants[i].AddLinks(variants);
-        }
+        manager.CreateLinks(variants);
     }
 
     public Variant GetCustomVariant(string name) 
     {
-        return customVariants[name];
+        return InternalCustomVariants[name];
     }
 
-    private static string GetCustomVariantTitle(string name)
+    public extern ArrowTypes orig_GetStartArrowType(int playerIndex, ArrowTypes randomType);
+
+    public ArrowTypes GetStartArrowType(int playerIndex, ArrowTypes randomType) 
     {
-        string text = name;
-        for (int i = 1; i < text.Length; i++)
+        foreach (var (arrowVariant, arrowTypes) in VariantManager.StartWithVariants)
         {
-            if (char.IsUpper(text[i]))
+            if (!arrowVariant[playerIndex])
+                continue;
+            return arrowTypes;
+        }
+        return orig_GetStartArrowType(playerIndex, randomType);
+    }
+
+    public extern List<Pickups> orig_GetItemExclusions(bool customTower);
+
+    public List<Pickups> GetItemExclusions(bool customTower)
+    {
+        var list = orig_GetItemExclusions(customTower);
+        foreach (var customVariant in InternalCustomVariants.Values) 
+        {
+            if (customVariant.Value && customVariant.ItemExclusions != null) 
             {
-                text = text.Substring(0, i) + " " + text.Substring(i);
-                i++;
+                list.AddRange(customVariant.ItemExclusions);
             }
         }
-        return text.ToUpper(CultureInfo.InvariantCulture);
+        return list;
     }
 }
 
+[Obsolete("Use FortRise.CustomVariantInfo")]
 public struct VariantInfo 
 {
     public Atlas VariantAtlas;
@@ -173,6 +182,7 @@ public struct VariantInfo
 
 
 [Flags]
+[Obsolete("Use FortRise.CustomVariantFlags")]
 public enum VariantFlags
 {
     None,

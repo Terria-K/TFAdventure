@@ -16,8 +16,6 @@ public static partial class RiseCore
 
         internal static void InitializeMods() 
         {
-            BlacklistedMods = ReadBlacklistedMods("Mods/blacklist.txt");
-
             var directory = Directory.GetDirectories("Mods");
             foreach (var dir in directory) 
             {
@@ -58,9 +56,11 @@ public static partial class RiseCore
             var metaPath = Path.Combine(dir, "meta.json");
             ModuleMetadata moduleMetadata = null;
             if (!File.Exists(metaPath))
+                metaPath = Path.Combine(dir, "meta.hjson");
+            if (!File.Exists(metaPath))
                 return;
             
-            moduleMetadata = ParseMetadataWithJson(dir, metaPath);
+            moduleMetadata = ParseMetadata(dir, metaPath);
             Loader.LoadMod(moduleMetadata, false);
         }
 
@@ -69,13 +69,19 @@ public static partial class RiseCore
             using var zipFile = ZipFile.Read(file);
 
             ModuleMetadata moduleMetadata = null;
-            if (!zipFile.ContainsEntry("meta.json"))
+            string metaFile = "meta.json";
+            if (!zipFile.ContainsEntry(metaFile))
+                metaFile = "meta.hjson";
+             if (!zipFile.ContainsEntry(metaFile))
                 return;
             
-            var entry = zipFile["meta.json"];
+            var entry = zipFile[metaFile];
             using var memStream = entry.ExtractStream();
 
-            moduleMetadata = ParseMetadataWithJson(file, memStream, true);
+            if (Path.GetExtension(metaFile) == ".hjson")
+                moduleMetadata = ParseMetadataWithHJson(file, memStream, true);
+            else
+                moduleMetadata = ParseMetadataWithJson(file, memStream, true);
             Loader.LoadMod(moduleMetadata, false);
         }
 
@@ -122,6 +128,7 @@ public static partial class RiseCore
             }
             
             Assembly asm = null;
+            LuaModule luaModule = null;
             ModResource modResource;
             if (!string.IsNullOrEmpty(metadata.PathZip)) 
             {
@@ -129,12 +136,15 @@ public static partial class RiseCore
 
                 RiseCore.ResourceTree.AddMod(metadata, modResource);
 
-                using var zip = new ZipFile(metadata.PathZip);
-                var dllPath = metadata.DLL.Replace('\\', '/');
-                if (zip.ContainsEntry(dllPath)) 
+                if (!RiseCore.DisableFortMods) 
                 {
-                    using var dll = zip[dllPath].ExtractStream();
-                    asm = Relinker.LoadModAssembly(metadata, metadata.DLL, dll);
+                    using var zip = new ZipFile(metadata.PathZip);
+                    var dllPath = metadata.DLL.Replace('\\', '/');
+                    if (zip.ContainsEntry(dllPath)) 
+                    {
+                        using var dll = zip[dllPath].ExtractStream();
+                        asm = Relinker.LoadModAssembly(metadata, metadata.DLL, dll);
+                    }
                 }
             }
             else if (!string.IsNullOrEmpty(metadata.PathDirectory)) 
@@ -143,11 +153,27 @@ public static partial class RiseCore
 
                 RiseCore.ResourceTree.AddMod(metadata, modResource);
                 var fullDllPath = Path.Combine(metadata.PathDirectory, metadata.DLL);
+                var fullLuaPath = Path.Combine(metadata.PathDirectory, "main.lua");
 
-                if (File.Exists(fullDllPath)) 
+                if (!RiseCore.DisableFortMods) 
                 {
-                    using var stream = File.OpenRead(fullDllPath);
-                    asm = Relinker.LoadModAssembly(metadata, metadata.DLL, stream);
+                    if (File.Exists(fullDllPath)) 
+                    {
+                        using var stream = File.OpenRead(fullDllPath);
+                        asm = Relinker.LoadModAssembly(metadata, metadata.DLL, stream);
+                    }
+                    else if (File.Exists(fullLuaPath)) 
+                    {
+                        using var mainLua = File.OpenRead(fullLuaPath);
+                        luaModule = new LuaModule(metadata, mainLua);
+                        var content = modResource.Content;
+                        luaModule.Content = content;
+                        ModuleGuids.Add(luaModule.ID);
+                        luaModule.InternalLoad();
+                        lock (InternalFortModules) 
+                            InternalFortModules.Add(luaModule);
+                        Logger.Info($"[Loader] {luaModule.ID}: {luaModule.Name} Lua Registered.");
+                    }
                 }
             }
             else 
@@ -193,21 +219,24 @@ public static partial class RiseCore
                 if (customAttribute == null)
                     continue;
                 
-                FortModule obj = Activator.CreateInstance(t) as FortModule;
+                FortModule module = Activator.CreateInstance(t) as FortModule;
                 if (metadata.Name == string.Empty)
                 {
                     metadata.Name = customAttribute.Name;
                 }
-                obj.Meta = metadata;
-                obj.Name = customAttribute.Name;
-                obj.ID = customAttribute.GUID;
+                module.Meta = metadata;
+                module.Name = customAttribute.Name;
+                module.ID = customAttribute.GUID;
                 var content = resource.Content;
-                obj.Content = content;
+                module.Content = content;
+                module.ParseArgs(RiseCore.ApplicationArgs);
+                module.InternalLoad();
+                lock (InternalFortModules) 
+                    InternalFortModules.Add(module);
 
-                ModuleGuids.Add(obj.ID);
-                obj.Register();
+                ModuleGuids.Add(module.ID);
 
-                Logger.Info($"[Loader] {obj.ID}: {obj.Name} Registered.");
+                Logger.Info($"[Loader] {module.ID}: {module.Name} Loaded.");
                 break;
             }
         }

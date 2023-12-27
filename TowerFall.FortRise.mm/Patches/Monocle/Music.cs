@@ -50,6 +50,24 @@ public static class patch_Music
         PlayInternal(filepath);
     }
 
+    public static void Play(TrackInfo info) 
+    {
+        if (currentSong == info.ResourcePath)
+            return;
+        
+        Stop();
+
+        if (audioEngine == null)
+            return;
+
+        var audioSystem = patch_Audio.GetMusicSystemFromExtension(info.ResourcePath);
+        if (audioSystem != null) 
+        {
+            patch_Audio.PlayMusic(audioSystem, info);
+        }
+        currentSong = info.ResourcePath;
+    }
+
     private static void PlayInternal(string filepath) 
     {
         Stop();
@@ -68,23 +86,34 @@ public static class patch_Music
             return;
         
         audioCategory.Stop(AudioStopOptions.Immediate);
-        patch_Audio.StopAudio(AudioStopOptions.Immediate);
+        patch_Audio.StopMusic(AudioStopOptions.Immediate);
         
         PlayInternal(filepath);
+    }
+
+    public static void PlayImmediate(TrackInfo info) 
+    {
+        if (currentSong == info.ResourcePath)
+            return;
+        
+        audioCategory.Stop(AudioStopOptions.Immediate);
+        patch_Audio.StopMusic(AudioStopOptions.Immediate);
+
+        if (audioEngine == null)
+            return;
+
+        var audioSystem = patch_Audio.GetMusicSystemFromExtension(info.ResourcePath);
+        if (audioSystem != null) 
+        {
+            patch_Audio.PlayMusic(audioSystem, info);
+        }
+        currentSong = info.ResourcePath;
     }
 
     [MonoModReplace]
     public static void Stop() 
     {
-        if (currentSong != null && SoundHelper.StoredInstance.TryGetValue(currentSong, out var instance) 
-            && instance.State == SoundState.Playing)
-        {
-            currentSong = null;
-            instance.Stop();
-            return;
-        }
-
-        patch_Audio.StopAudio(AudioStopOptions.AsAuthored);
+        patch_Audio.StopMusic(AudioStopOptions.AsAuthored);
         currentSong = null;
     }
 
@@ -101,6 +130,13 @@ public static class patch_Music
     internal static AudioCategory InternalAccessAudioCategory() 
     {
         return audioCategory;
+    }
+
+    [MonoModReplace]
+    internal static void Update()
+    {
+        audioEngine?.Update();
+        SoundEffectTracker.Update();
     }
 }
 

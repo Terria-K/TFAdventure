@@ -1,4 +1,5 @@
 using System;
+using FortRise;
 using MonoMod;
 
 namespace TowerFall;
@@ -11,6 +12,17 @@ public class patch_MatchSettings : MatchSettings
     public patch_MatchSettings.patch_MatchLengths MatchLength;
     private static readonly float[] GoalMultiplier;
     public static int CustomGoal { get; set; } = 1;
+    public FortRise.CustomGameMode CurrentCustomGameMode 
+    {
+        get 
+        {
+            if (GameModeRegistry.TryGetGameMode(CurrentModeName, out var mode)) 
+            {
+                return mode;
+            }
+            return null;
+        }
+    } 
 
     public extern int orig_get_GoalScore();
 
@@ -27,6 +39,20 @@ public class patch_MatchSettings : MatchSettings
             return (int)Math.Ceiling(((float)goals * GoalMultiplier[(int)MatchLength]));
         }
         return orig_get_GoalScore();
+    }
+
+    [MonoModReplace]
+    public bool get_TeamMode() 
+    {
+        if (IsCustom) 
+        {
+            var gameMode = CurrentCustomGameMode;
+            if (gameMode != null) 
+            {
+                return gameMode.TeamMode;
+            }
+        }
+        return Mode == patch_Modes.TeamDeathmatch;
     }
 
     [MonoModIgnore]

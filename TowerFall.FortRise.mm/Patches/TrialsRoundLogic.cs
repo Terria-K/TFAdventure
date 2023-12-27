@@ -28,20 +28,20 @@ public class patch_TrialsRoundLogic : TrialsRoundLogic
     {
         base_OnLevelLoadFinish();
         Point id = MainMenu.TrialsMatchSettings.LevelSystem.ID;
-        base.Session.CurrentLevel.Add<TrialsStart>(new TrialsStart(base.Session));
-        base.Session.CurrentLevel.Add<TrialsControl>(this.Control = new TrialsControl());
-        base.Players = 1;
+        Session.CurrentLevel.Add(new TrialsStart(Session));
+        Session.CurrentLevel.Add(Control = new TrialsControl());
+        Players = 1;
         int num = 0;
         while (num < 4 && !TFGame.Players[num])
         {
             num++;
         }
-        List<Vector2> xmlpositions = base.Session.CurrentLevel.GetXMLPositions("PlayerSpawn");
+        List<Vector2> xmlpositions = Session.CurrentLevel.GetXMLPositions("PlayerSpawn");
         Player player = new Player(num, xmlpositions[0] + Vector2.UnitY * 2f, Allegiance.Neutral, Allegiance.Neutral, new PlayerInventory(GameData.TrialsLevels[id.X, id.Y]), Player.HatStates.Normal, true, true, true);
-        base.Session.CurrentLevel.Add<Player>(player);
-        foreach (XmlElement xmlElement in base.Session.CurrentLevel.GetXMLEntities("TreasureChest"))
+        Session.CurrentLevel.Add(player);
+        foreach (XmlElement xmlElement in Session.CurrentLevel.GetXMLEntities("TreasureChest"))
         {
-            base.Session.CurrentLevel.Add<TreasureChest>(new TreasureChest(
+            Session.CurrentLevel.Add(new TreasureChest(
                 xmlElement.Position(), 
                 xmlElement.AttrEnum<TreasureChest.Types>("Type"), 
                 xmlElement.AttrEnum<TreasureChest.AppearModes>("Mode"), 

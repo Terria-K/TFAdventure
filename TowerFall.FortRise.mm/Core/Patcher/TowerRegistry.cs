@@ -21,6 +21,28 @@ public static class TowerRegistry
     public static Dictionary<string, List<AdventureTrialsTowerData[]>> TrialsTowerSets = new();
     public static List<string> TrialsLevelSet = new();
 
+    public static void PlayDarkWorld(string levelSet, string levelID, DarkWorldDifficulties difficulty, int startLevel = 0) 
+    {
+        // Checks if any players are present
+        foreach (var player in TFGame.Players) 
+        {
+            if (player)
+                // if there is, go to the level loading immediately
+                goto Proceed;
+        }
+        //if not, activate atleast one player
+        TFGame.Players[0] = true;
+        Proceed:
+        var level = DarkWorldGet(levelSet, levelID);
+        patch_DarkWorldLevelSystem system = level.GetLevelSystem() as patch_DarkWorldLevelSystem;
+        MainMenu.DarkWorldMatchSettings.DarkWorldDifficulty = difficulty;
+        system.StartLevel = startLevel;
+        MainMenu.DarkWorldMatchSettings.LevelSystem = system;
+        Session session = new Session(MainMenu.DarkWorldMatchSettings);
+        session.SetLevelSet(levelSet);
+        session.StartGame();
+    }
+
     public static void DarkWorldAdd(string levelSet, AdventureWorldTowerData data) 
     {
         if (levelSet == string.Empty)
@@ -86,6 +108,24 @@ public static class TowerRegistry
         }
         return null;
     }
+
+    public static AdventureWorldTowerData DarkWorldGet(string levelSet, string levelID, out int id) 
+    {
+        var darkWorldLevel = DarkWorldTowerSets[levelSet];
+        int i = 0;
+        foreach (var level in darkWorldLevel) 
+        {
+            if (level.GetLevelID() == levelID) 
+            {
+                id = i;
+                return level;
+            }
+            i++;
+        }
+        id = -1;
+        return null;
+    }
+
     public static bool TryDarkWorldGet(string levelSet, int levelID, out AdventureQuestTowerData data) 
     {
         if (QuestTowerSets.TryGetValue(levelSet, out var arr)) 
@@ -282,7 +322,7 @@ public static class TowerRegistry
                 child.ResourceType == typeof(RiseCore.ResourceTypeJson)) &&
                 !child.Path.StartsWith("icon"))
                 {
-                    levelData.Levels.Add(AdventureVersusLevelData.CreateFromAdventure(child.Root + child.Path));
+                    levelData.Levels.Add(AdventureVersusLevelData.CreateFromAdventure(child.RootPath));
                     continue;
                 }
 
@@ -392,7 +432,7 @@ public static class TowerRegistry
                 child.ResourceType == typeof(RiseCore.ResourceTypeJson)) &&
                 !child.Path.Contains("icon.json"))
                 {
-                    levelData.Levels.Add(child.Root + child.Path);
+                    levelData.Levels.Add(child.RootPath);
                     continue;
                 }
 
@@ -455,23 +495,60 @@ public static class TowerRegistry
             .Where(folder => folder.ResourceType == typeof(RiseCore.ResourceTypeTrialsTowerFolder)))
         {
             var path = map.FullPath.Substring(4).Replace("Content/Levels/Trials/", string.Empty);
-            RiseCore.Resource xmlResource = null;
+            RiseCore.Resource towerResource = null;
             foreach (var child in map.Childrens) 
             {
-                if (child.Path.Contains("tower.xml")) 
+                if (child.Path.Contains("tower.xml") || child.Path.Contains("tower.hjson")) 
                 {
-                    xmlResource = child;
+                    towerResource = child;
                 }
             }
-            if (xmlResource == null)
+            if (towerResource == null)
                 continue;
-
-            using var xmlStream = xmlResource.Stream;
-            var xml = patch_Calc.LoadXML(xmlStream)["tower"];
-
-
-            foreach (XmlElement tier in xml.GetElementsByTagName("tier")) 
+            
+            if (towerResource.ResourceType == typeof(RiseCore.ResourceTypeHJson)) 
             {
+                using var hjsonStream = towerResource.Stream;
+                var json = Hjson.HjsonValue.Load(hjsonStream);
+                int id = 0;
+                var arr = new AdventureTrialsTowerData[3];
+
+                foreach (KeyValuePair<string, Hjson.JsonValue> level in json) 
+                {
+                    var trialData = new AdventureTrialsTowerData();
+                    trialData.SetLevelID(path + "-" + id);
+                    trialData.Stats = AdventureModule.SaveData.AdventureTrials.AddOrGet(trialData.GetLevelID());
+                    trialData.SetLevelSet(path);
+                    trialData.Path = map.Root + map.Path + "/" + level.Key;
+                    trialData.Arrows = level.Value.GetJsonValueOrNull("arrows") ?? 3;
+                    trialData.SwitchBlockTimer = level.Value.GetJsonValueOrNull("switchTimer") ?? 200;
+                    trialData.Theme = LoadTheme(level.Value, map);
+                    trialData.Goals = new TimeSpan[3];
+                    trialData.Goals[0] = TimeSpan.FromSeconds(level.Value.GetJsonValueOrNull("gold") ?? 0.3);
+                    trialData.Goals[1] = TimeSpan.FromSeconds(level.Value.GetJsonValueOrNull("diamond") ?? 0.2);
+                    trialData.Goals[2] = TimeSpan.FromSeconds(level.Value.GetJsonValueOrNull("dev") ?? 0.1);
+                    arr[id] = trialData;
+                    id++;
+
+                    trialData.Author = level.Value.GetJsonValueOrNull("author") ?? string.Empty;
+
+                    if (level.Value.ContainsKey("required"))
+                        trialData.RequiredMods = level.Value["required"];
+                    else
+                        trialData.RequiredMods = string.Empty;
+                }
+                TowerRegistry.TrialsAdd(arr);
+                if (arr.Length > 0)
+                    RiseCore.Events.Invoke_OnAdventureTrialsTowerDatasAdd(arr[0].GetLevelSet(), arr);
+                return;
+            }
+            {
+                using var xmlStream = towerResource.Stream;
+                var xml = patch_Calc.LoadXML(xmlStream)["tower"];
+
+                if (xml.HasChild("tier"))
+                    xml = xml["tier"];
+
                 int id = 0;
                 var arr = new AdventureTrialsTowerData[3];
                 foreach (XmlElement element in xml.GetElementsByTagName("level")) 
@@ -493,16 +570,32 @@ public static class TowerRegistry
 
                     trialData.Author = xml.ChildText("author", string.Empty);
 
-                    if (xml.HasChild("required"))
-                        trialData.RequiredMods = xml["required"].InnerText;
-                    else
-                        trialData.RequiredMods = string.Empty;
+                    trialData.RequiredMods = xml.ChildText("required", string.Empty);
                 }
                 TowerRegistry.TrialsAdd(arr);
                 if (arr.Length > 0)
                     RiseCore.Events.Invoke_OnAdventureTrialsTowerDatasAdd(arr[0].GetLevelSet(), arr);
             }
         }
+    }
+
+    private static TowerTheme LoadTheme(Hjson.JsonValue value, RiseCore.Resource map) 
+    {
+        if (value.ContainsKey("theme")) 
+        {
+            var jsonTheme = value["theme"];
+            if (jsonTheme.ContainsKey("Name")) 
+            {
+                var atlas = value.GetJsonValueOrNull("atlas") ?? "Atlas/atlas";
+                var theme = ThemeResource.Create(atlas, map);
+                return new patch_TowerTheme(value["theme"], map, theme);
+            }
+            else 
+            {
+                return GameData.Themes[value["theme"]];
+            }
+        }
+        return TowerTheme.GetDefault();
     }
 
     private static TowerTheme LoadTheme(XmlElement xml, RiseCore.Resource map) 
@@ -512,17 +605,13 @@ public static class TowerRegistry
             var xmlTheme = xml["theme"];
             if (xmlTheme.HasChild("Name")) 
             {
-                var atlas = xml.Attr("atlas", "Atlas/atlas");
+                var atlas = xmlTheme.Attr("atlas", "Atlas/atlas");
                 var theme = ThemeResource.Create(atlas, map);
                 return new patch_TowerTheme(xml["theme"], map, theme);
             }
-            else if (RiseCore.GameData.Themes.TryGetValue(xml.ChildText("theme").Trim(), out var theme)) 
-            {
-                return theme;
-            }
             else 
             {
-                return GameData.Themes[xml.ChildText("theme")];
+                return GameData.Themes[xml.ChildText("theme").Trim()];
             }
         }
         return TowerTheme.GetDefault();

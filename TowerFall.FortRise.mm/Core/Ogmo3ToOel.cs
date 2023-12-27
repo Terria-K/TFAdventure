@@ -12,6 +12,8 @@ namespace FortRise;
 /// </summary>
 public static class Ogmo3ToOel 
 {
+    public delegate void ReadLayerHandler(OgmoLayer layer, XmlElement xmlLevel);
+    public static event ReadLayerHandler ReadLayer;
     /// <summary>
     /// Loads a Ogmo Editor 3 *.json level file.
     /// </summary>
@@ -49,60 +51,83 @@ public static class Ogmo3ToOel
 
         XmlElement bg = xmlDocument.CreateElement("BG");
         bg.SetAttribute("exportMode", "Bitstring");
-        bg.InnerText = Array2DToBitString(levelData.Layers[3].Grid2D);
-        level.AppendChild(bg);
 
         XmlElement bgTiles = xmlDocument.CreateElement("BGTiles");
         bgTiles.SetAttribute("tileset", levelData.GetValueString("TilesetBG"));
         bgTiles.SetAttribute("exportMode", "TrimmedCSV");
-        bgTiles.InnerText = Array2DToCSV(levelData.Layers[2].Data);
-        level.AppendChild(bgTiles);
 
         XmlElement solids = xmlDocument.CreateElement("Solids");
         solids.SetAttribute("exportMode", "Bitstring");
-        solids.InnerText = Array2DToBitString(levelData.Layers[0].Grid2D);
-        level.AppendChild(solids);
 
         XmlElement solidTiles = xmlDocument.CreateElement("SolidTiles");
         solidTiles.SetAttribute("tileset", levelData.GetValueString("Tileset"));
         solidTiles.SetAttribute("exportMode", "TrimmedCSV");
-        level.AppendChild(solidTiles);
 
         XmlElement entities = xmlDocument.CreateElement("Entities");
 
-        foreach (var entity in levelData.Layers[1].Entities) 
+        foreach (var layer in levelData.Layers) 
         {
-            var element = xmlDocument.CreateElement(entity.Name);
-            element.SetAttribute("x", entity.X.ToString());
-            element.SetAttribute("y", entity.Y.ToString());
-            element.SetAttribute("width", entity.Width.ToString());
-            element.SetAttribute("height", entity.Height.ToString());
-
-            if (entity.Nodes != null)
-                foreach (var node in entity.Nodes) 
-                {
-                    var nodeElement = xmlDocument.CreateElement("node");
-                    nodeElement.SetAttribute("x", node.X.ToString());
-                    nodeElement.SetAttribute("y", node.Y.ToString());
-                    element.AppendChild(nodeElement);
-                }
-
-            if (entity.Values != null)
-            foreach (var values in entity.Values.Pairs) 
+            switch (layer.Name) 
             {
-                var attrib = xmlDocument.CreateAttribute(values.Key);
-                if (values.Value.IsBoolean) 
+            case "BG": 
+                bg.InnerText = Array2DToBitString(layer.Grid2D);
+                break;
+            case "BGTiles": 
+                bgTiles.InnerText = Array2DToCSV(layer.Data);
+                break;
+            case "Solids":
+                solids.InnerText = Array2DToBitString(layer.Grid2D);
+                break;
+            case "SolidTiles":
+                solidTiles.InnerText = Array2DToCSV(layer.Data);
+                break;
+            case "Entities":
+                foreach (var entity in layer.Entities) 
                 {
-                    attrib.Value = values.Value.AsBoolean ? "True" : "False";
+                    var element = xmlDocument.CreateElement(entity.Name);
+                    element.SetAttribute("id", entity.ID.ToString());
+                    element.SetAttribute("x", entity.X.ToString());
+                    element.SetAttribute("y", entity.Y.ToString());
+                    element.SetAttribute("width", entity.Width.ToString());
+                    element.SetAttribute("height", entity.Height.ToString());
+
+                    if (entity.Nodes != null) 
+                    {
+                        foreach (var node in entity.Nodes) 
+                        {
+                            var nodeElement = xmlDocument.CreateElement("node");
+                            nodeElement.SetAttribute("x", node.X.ToString());
+                            nodeElement.SetAttribute("y", node.Y.ToString());
+                            element.AppendChild(nodeElement);
+                        }
+                    }
+
+                    foreach (var values in entity.Values?.Pairs) 
+                    {
+                        var attrib = xmlDocument.CreateAttribute(values.Key);
+                        if (values.Value.IsBoolean) 
+                        {
+                            attrib.Value = values.Value.AsBoolean ? "True" : "False";
+                        }
+                        else 
+                        {
+                            attrib.Value = values.Value.ToString();
+                        }
+                        element.Attributes.Append(attrib);
+                    }
+                    entities.AppendChild(element);
                 }
-                else 
-                {
-                    attrib.Value = values.Value.ToString();
-                }
-                element.Attributes.Append(attrib);
+                break;
+            default:
+                ReadLayer?.Invoke(layer, level);
+                break;
             }
-            entities.AppendChild(element);
         }
+
+        level.AppendChild(bg);
+        level.AppendChild(bgTiles);
+        level.AppendChild(solids);
+        level.AppendChild(solidTiles);
         level.AppendChild(entities);
 
         return xmlDocument;
@@ -356,10 +381,11 @@ public sealed partial class OgmoEntity : IDeserialize
         var alpha = Float(a);
         return new Color(red, green, blue, alpha);
     }
+    private static char[] SplitChar = new char[1] { ',' };
 
     public Color Color(string value)
     {
-        var val = String(value).Split(',');
+        var val = String(value).Split(SplitChar);
         if (val.Length == 4) 
         {
             var red = Float(val[0]);

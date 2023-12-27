@@ -51,46 +51,46 @@ public class patch_DarkWorldLevelSelectOverlay : DarkWorldLevelSelectOverlay
             return;
         }
         var adventureWorldTowerStats = TowerRegistry.DarkWorldGet(levelSet, statsID).Stats;
-        long num;
-        int num2;
+        long bestTime;
+        int mostCurses;
         switch (TFGame.PlayerAmount)
         {
         default:
-            num = adventureWorldTowerStats.Best1PTime;
-            num2 = adventureWorldTowerStats.Most1PCurses;
+            bestTime = adventureWorldTowerStats.Best1PTime;
+            mostCurses = adventureWorldTowerStats.Most1PCurses;
             break;
         case 2:
-            num = adventureWorldTowerStats.Best2PTime;
-            num2 = adventureWorldTowerStats.Most2PCurses;
+            bestTime = adventureWorldTowerStats.Best2PTime;
+            mostCurses = adventureWorldTowerStats.Most2PCurses;
             break;
         case 3:
-            num = adventureWorldTowerStats.Best3PTime;
-            num2 = adventureWorldTowerStats.Most3PCurses;
+            bestTime = adventureWorldTowerStats.Best3PTime;
+            mostCurses = adventureWorldTowerStats.Most3PCurses;
             break;
         case 4:
-            num = adventureWorldTowerStats.Best4PTime;
-            num2 = adventureWorldTowerStats.Most4PCurses;
+            bestTime = adventureWorldTowerStats.Best4PTime;
+            mostCurses = adventureWorldTowerStats.Most4PCurses;
             break;
         }
-        if (num <= 0L)
+        if (bestTime <= 0L)
         {
             this.levelBestTimeString = "";
         }
         else
         {
-            this.levelBestTimeString = TrialsResults.GetTimeString(num);
+            this.levelBestTimeString = TrialsResults.GetTimeString(bestTime);
         }
-        if (num2 <= 0)
+        if (mostCurses <= 0)
         {
             this.levelCursesString = "";
         }
-        else if (num2 == 1)
+        else if (mostCurses == 1)
         {
             this.levelCursesString = "1 CURSE";
         }
         else
         {
-            this.levelCursesString = num2.ToString() + " CURSES";
+            this.levelCursesString = mostCurses.ToString() + " CURSES";
         }
         if (adventureWorldTowerStats.Deaths == 0UL)
         {

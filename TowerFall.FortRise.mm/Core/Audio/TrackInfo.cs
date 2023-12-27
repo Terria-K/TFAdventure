@@ -27,7 +27,7 @@ public struct TrackInfo
             return new WavAudioTrack(stream);
         }
 
-        Logger.Log("[TrackInfo] Unsupported Extension");
+        Logger.Error("[TrackInfo] Unsupported Extension");
         return null;
     }
 }

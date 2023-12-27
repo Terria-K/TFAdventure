@@ -1,4 +1,5 @@
 .vscode/
+busybox64.*
 obj/
 bin/
 lib/**/Microsoft.Xna*.dll

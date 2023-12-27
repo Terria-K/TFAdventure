@@ -82,17 +82,6 @@ namespace TowerFall
             var levelSession = Level.Session;
             var themeMusic = Level.Session.MatchSettings.LevelSystem.Theme.Music;
             levelSession.SongTimer = 0;
-            if (themeMusic.Contains("custom:", StringComparison.OrdinalIgnoreCase))
-            {
-                // var storedDirectory = patch_GameData.AdventureWorldTowers[levelSession.MatchSettings.LevelSystem.ID.X].StoredDirectory;
-
-                // var path = PathUtils.CombinePrefixPath(
-                //     themeMusic, 
-                //     storedDirectory,
-                //     "custom:");
-                // Music.Play(path);
-                return;
-            }
             Music.Play(themeMusic);
         }
 
@@ -164,6 +153,19 @@ namespace TowerFall
                 portals.AddRange(allPortals);
             }
         }
+
+        private void PlayBossMusic() 
+        {
+            foreach (var layer in Scene.Layers.Values) 
+            {
+                var boss = layer.GetFirst<patch_DarkWorldBoss>();
+                if (boss is not null) 
+                {
+                    Music.Play(boss.BossMusic);
+                    return;
+                }
+            }
+        }
     }
 }
 
@@ -183,6 +185,7 @@ namespace MonoMod
             new ILContext(complete).Invoke(ctx => {
                 var f__4this = ctx.Method.DeclaringType.FindField("<>4__this");
                 var FixedEmptyPortal = f__4this.FieldType.Resolve().FindMethod("System.Void FixedEmptyPortal()");
+                var PlayBossMusic = f__4this.FieldType.Resolve().FindMethod("System.Void PlayBossMusic()");
                 var cursor = new ILCursor(ctx);
                 ILLabel val = null;
 
@@ -193,10 +196,15 @@ namespace MonoMod
                 else
                     brFalseOrTrue = instr => instr.MatchBrtrue(out val);
 
-                cursor.GotoNext(MoveType.After, 
-                    brFalseOrTrue,
-                    instr => instr.MatchLdstr("DarkBoss"),
-                    instr => instr.MatchCall("Monocle.Music", "System.Void Play(System.String)"));
+                cursor.GotoNext(brFalseOrTrue,
+                    instr => instr.MatchLdstr("DarkBoss"));
+                
+                cursor.GotoNext();
+                cursor.RemoveRange(2);
+
+                cursor.Emit(OpCodes.Ldarg_0);
+                cursor.Emit(OpCodes.Ldfld, f__4this);
+                cursor.Emit(OpCodes.Call, PlayBossMusic);
 
                 cursor.MarkLabel(val);
                 cursor.Emit(OpCodes.Ldarg_0);

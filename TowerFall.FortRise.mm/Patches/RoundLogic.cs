@@ -1,4 +1,5 @@
 using System;
+using FortRise;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using MonoMod;
@@ -17,10 +18,9 @@ namespace TowerFall
 
         public static RoundLogic GetRoundLogic(patch_Session session) 
         {
-            if (session.MatchSettings.IsCustom && 
-                FortRise.RiseCore.RoundLogicLoader.TryGetValue(session.MatchSettings.CurrentModeName, out var logic)) 
+            if (session.MatchSettings.IsCustom && GameModeRegistry.TryGetGameMode(session.MatchSettings.CurrentModeName, out var mode)) 
             {
-                return logic(session, false);
+                return mode.CreateRoundLogic(session);
             }
             return orig_GetRoundLogic(session);
         }

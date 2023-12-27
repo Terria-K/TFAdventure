@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Xml;
 using FortRise;
@@ -10,6 +11,7 @@ public class patch_VersusLevelSystem : VersusLevelSystem
 {
     private List<string> levels;
     private string lastLevel;
+    public string LastLevel => lastLevel;
 
     [MonoModIgnore]
     public VersusTowerData VersusTowerData { get; private set; }
@@ -36,29 +38,46 @@ public class patch_VersusLevelSystem : VersusLevelSystem
 
     public override XmlElement GetNextRoundLevel(MatchSettings matchSettings, int roundIndex, out int randomSeed)
     {
-        if (VersusTowerData.GetLevelSet() != "TowerFall") 
+        try 
         {
-            if (this.levels.Count == 0)
+            if (VersusTowerData.GetLevelSet() != "TowerFall") 
             {
-                this.GenLevels(matchSettings);
+                if (levels.Count == 0)
+                {
+                    GenLevels(matchSettings);
+                }
+                lastLevel = this.levels[0];
+                levels.RemoveAt(0);
+                randomSeed = 0;
+                foreach (char c in lastLevel)
+                {
+                    randomSeed += c;
+                }
+                if (RiseCore.ResourceTree.TreeMap.TryGetValue(lastLevel, out var res)) 
+                {
+                    using var lastLevelStream = res.Stream;
+                    return patch_Calc.LoadXML(lastLevelStream)["level"];
+                }
+                Logger.Error($"[VERSUSLEVELSYSTEM][{lastLevel}] Path not found!");
             }
-            this.lastLevel = this.levels[0];
-            this.levels.RemoveAt(0);
-            randomSeed = 0;
-            foreach (char c in this.lastLevel)
-            {
-                randomSeed += (int)c;
-            }
-            if (RiseCore.ResourceTree.TreeMap.TryGetValue(lastLevel, out var res)) 
-            {
-                using var lastLevelStream = res.Stream;
-                return patch_Calc.LoadXML(lastLevelStream)["level"];
-            }
-            Logger.Error($"[VERSUSLEVELSYSTEM][{lastLevel}] Path not found!");
+            return orig_GetNextRoundLevel(matchSettings, roundIndex, out randomSeed);
         }
-        return orig_GetNextRoundLevel(matchSettings, roundIndex, out randomSeed);
+        catch (Exception e)
+        {
+            ErrorHelper.StoreException("Missing Level", e);
+            randomSeed = 0;
+            return null;
+        }
     }
 
     [MonoModIgnore]
     private extern void GenLevels(MatchSettings matchSettings);
+}
+
+public static class VersusLevelSystemExt 
+{
+    public static string GetLastLevel(this VersusLevelSystem system) 
+    {
+        return ((patch_VersusLevelSystem)system).LastLevel;
+    }
 }

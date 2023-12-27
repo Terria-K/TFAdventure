@@ -30,14 +30,34 @@ public abstract partial class FortModule
     public bool RequiredRestart { get; set; }
     public bool DisposeTextureAfterUnload { get; set; } = true;
 
+    /// <summary>
+    /// Use to let the mod loader know which settings type to initialize.
+    /// </summary>
     public virtual Type SettingsType { get; }
+    /// <summary>
+    /// An initialized settings from <see cref="FortModule.SettingsType"/>. Cast this with your own settings type.
+    /// </summary>
     public ModuleSettings InternalSettings;
     public virtual Type SaveDataType { get; }
     public ModuleSaveData InternalSaveData;
+    /// <summary>
+    /// The module's mod content which use to load atlases, spriteDatas, SFXes, etc..
+    /// </summary>
     public FortContent Content;
 
-
+    /// <summary>
+    /// Override this function to load your hooks, events, and set environment variables for your mod.
+    /// <br/>
+    /// DO NOT LOAD YOUR CONTENTS HERE OR INITIALIZE SOMETHING. 
+    /// <br/>
+    /// Use <see cref="FortModule.LoadContent"/>
+    /// or <see cref="FortModule.Initialize"/> instead.
+    /// </summary>
     public abstract void Load();
+
+    /// <summary>
+    /// Override this function to unload your hooks or dispose your resources.
+    /// </summary>
     public abstract void Unload();
 
 
@@ -153,7 +173,8 @@ public abstract partial class FortModule
             }
             else if ((fieldType == typeof(int)) && (optAttrib = field.GetCustomAttribute<SettingsOptionsAttribute>()) != null) 
             {
-                var selectionOption = new TextContainer.SelectionOption(fullName, optAttrib.Options);
+                var defaultVal = (int)field.GetValue(settings);
+                var selectionOption = new TextContainer.SelectionOption(fullName, optAttrib.Options, defaultVal);
                 selectionOption.Change(x => {
                     field.SetValue(settings, x.Item2);
                 });
@@ -161,7 +182,9 @@ public abstract partial class FortModule
             }
             else if ((fieldType == typeof(string)) && (optAttrib = field.GetCustomAttribute<SettingsOptionsAttribute>()) != null) 
             {
-                var selectionOption = new TextContainer.SelectionOption(fullName, optAttrib.Options);
+                var defaultVal = (string)field.GetValue(settings);
+                var selectionOption = new TextContainer.SelectionOption(
+                    fullName, optAttrib.Options, Array.IndexOf<string>(optAttrib.Options, defaultVal));
                 selectionOption.Change(x => {
                     field.SetValue(settings, x.Item1);
                 });
@@ -170,7 +193,8 @@ public abstract partial class FortModule
             else if ((fieldType == typeof(int) || fieldType == typeof(float)) && 
                 (attrib = field.GetCustomAttribute<SettingsNumberAttribute>()) != null) 
             {
-                var numberButton = new TextContainer.Number(fullName, attrib.Min, attrib.Max);
+                var defaultVal = (int)field.GetValue(settings);
+                var numberButton = new TextContainer.Number(fullName, defaultVal, attrib.Min, attrib.Max);
                 numberButton.Change(x => {
                     if (field.FieldType == typeof(float))
                         field.SetValue(settings, (float)x);
@@ -183,11 +207,38 @@ public abstract partial class FortModule
         }
     }
 
-
+    /// <summary>
+    /// Override this function and this is called after all mods are loaded and 
+    /// this mod is registered.
+    /// </summary>
+    public virtual void AfterLoad() {}
+    /// <summary>
+    /// Override this function and load your contents here such as <see cref="Monocle.Atlas"/>,
+    /// <see cref="Monocle.SFX"/>, <see cref="Monocle.SpriteData"/>, etc.. <br/>
+    /// There is <see cref="FortModule.Content"/> you can use to load your content inside of your mod folder or zip. 
+    /// </summary>
     public virtual void LoadContent() {}
+    /// <summary>
+    /// Override this function and this is called after all the game data is loaded.
+    /// </summary>
     public virtual void Initialize() {}
+    [Obsolete("Use FortModule.OnVariantsRegister(VariantManager, bool) instead")]
     public virtual void OnVariantsRegister(MatchVariants variants, bool noPerPlayer = false) {}
+    /// <summary>
+    /// Override this function and allows you to add your own variant using the <paramref name="manager"/>.
+    /// </summary>
+    /// <param name="manager">A <see cref="FortRise.VariantManager"/> use to add variant</param>
+    /// <param name="noPerPlayer">Checks if the variant would not a per player variant, default is true</param>
+    public virtual void OnVariantsRegister(VariantManager manager, bool noPerPlayer = false) {}
+    /// <summary>
+    /// Override this function and allows you to parse a launch arguments that has been passed to the game.
+    /// </summary>
+    /// <param name="args">A launch arguments that has been passed to the game</param>
+    public virtual void ParseArgs(string[] args) 
+    {
+    }
 
+    /// <inheritdoc cref="RiseCore.IsModExists(string)"/>
     public bool IsModExists(string modName) 
     {
         return RiseCore.IsModExists(modName);
@@ -240,6 +291,40 @@ public class ModuleMetadata : IEquatable<ModuleMetadata>, IDeserialize
         var version = Version.Major.GetHashCode() + Version.Minor.GetHashCode();
         var name = Name.GetHashCode();
         return version + name;
+    }
+
+    public static ModuleMetadata HJsonToMetadata(Hjson.JsonValue value)
+    {
+        var metadata = new ModuleMetadata();
+        metadata.Name = value["name"];
+        string version = value.ContainsKey("version") ? value["version"] : "1.0.0";
+        metadata.Version = new Version(version);
+
+        string fVersion = value.ContainsKey("required") ? value["required"] : null;
+        
+        if (fVersion == null)
+            metadata.FortRiseVersion = RiseCore.FortRiseVersion;
+        else
+            metadata.FortRiseVersion = new Version(fVersion);
+
+        metadata.Description = value.GetJsonValueOrNull("description") ?? string.Empty;
+        metadata.Author = value.GetJsonValueOrNull("author") ?? string.Empty;
+        metadata.DLL = value.GetJsonValueOrNull("dll") ?? string.Empty;
+        metadata.NativePath = value.GetJsonValueOrNull("nativePath") ?? string.Empty;
+        metadata.NativePathX86 = value.GetJsonValueOrNull("nativePathX86") ?? string.Empty;
+        var dep = value.GetJsonValueOrNull("dependencies");
+        if (dep is null)
+            return metadata;
+        
+        Hjson.JsonArray asJsonArray = dep as Hjson.JsonArray;
+        int count = asJsonArray.Count;
+        ModuleMetadata[] array = new ModuleMetadata[count];
+        for (int i = 0; i < count; i++)
+        {
+            array[i] = HJsonToMetadata(asJsonArray[i]);
+        }
+        metadata.Dependencies = array;
+        return metadata;
     }
 
     public void Deserialize(JsonObject value)

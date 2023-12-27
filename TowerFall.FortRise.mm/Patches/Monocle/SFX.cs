@@ -42,6 +42,22 @@ public class patch_SFX : SFX
             Data = null;
         }
     }
+
+    [MonoModReplace]
+    public override void Play(float panX = 160f, float volume = 1f)
+    {
+        if (Data != null && Audio.MasterVolume > 0f)
+        {
+            AddToPlayedList(panX, volume);
+            volume *= Audio.MasterVolume;
+            var instance = Data.CreateInstance();
+            instance.Volume = volume;
+            instance.Pitch = ObeysMasterPitch ? Audio.MasterPitch : 0f;
+            instance.Pan = SFX.CalculatePan(panX);
+            SoundEffectTracker.Track(instance);
+            instance.Play();
+        }
+    }
 }
 
 

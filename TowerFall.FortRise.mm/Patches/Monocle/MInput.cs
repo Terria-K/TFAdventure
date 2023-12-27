@@ -1,9 +1,31 @@
+using System;
 using System.Collections.Generic;
+using FortRise;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 using MonoMod;
 
 namespace Monocle;
+
+[MonoModPatch("MInput")]
+[MonoModIfFlag("OS:Windows")]
+public static class DInputRemoval 
+{
+    [MonoModRemove]
+    private static object DirectInput;
+    [MonoModRemove]
+    public static List<MInput.JoystickData> Joysticks;
+
+    [MonoModReplace]
+    public static string[] LogJoysticks()
+    {
+        return Array.Empty<string>();
+    }
+
+    [MonoModPatch("JoystickData")]
+    [MonoModRemove]
+    public class JoystickData {}
+} 
 
 public static class patch_MInput 
 {
@@ -65,7 +87,7 @@ public static class patch_MInput
             var xGamepadData = XGamepads[i];
             if (!xGamepadData.Attached)
             {
-                Calc.Log("Removed XGamepad: " + xGamepadData);
+                Logger.Info("Removed XGamepad: " + xGamepadData);
                 MInput.GamepadsChanged = true;
                 XGamepads[i].Dispose();
                 MInput.XGamepads.RemoveAt(i);
@@ -77,10 +99,12 @@ public static class patch_MInput
         
         for (int i = MInput.XGamepads.Count; i < 4; i++)
         {
-            if (GamePad.GetState((PlayerIndex)i).IsConnected)
+            var playerIndex = (PlayerIndex)i;
+            if (GamePad.GetState(playerIndex).IsConnected)
             {
-                MInput.XGamepads.Add(new MInput.XGamepadData((PlayerIndex)i));
-                Calc.Log("Add XGamepad: " + i);
+                var gamepadData = new MInput.XGamepadData(playerIndex);
+                MInput.XGamepads.Add(gamepadData);
+                Logger.Info("Add XGamepad: " + gamepadData);
                 MInput.GamepadsChanged = true;
             }
         }

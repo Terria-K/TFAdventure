@@ -12,6 +12,8 @@ public sealed class CustomPickupAttribute : Attribute
     public string GraphicPickupInitializer;
     public float Chance = 1f;
 
+    public CustomPickupAttribute() {}
+
     public CustomPickupAttribute(string name, string init = "Init") 
     {
         Name = name;
@@ -28,6 +30,7 @@ public sealed class CustomPickupAttribute : Attribute
 
 public class PickupObject 
 {
+    public string Name;
     public Pickups ID;
     public float Chance;
 }

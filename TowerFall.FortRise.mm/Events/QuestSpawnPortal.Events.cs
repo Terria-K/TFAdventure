@@ -1,4 +1,7 @@
+using System;
+using System.Collections.Generic;
 using FortRise;
+using Monocle;
 using Microsoft.Xna.Framework;
 using TowerFall;
 
@@ -58,10 +61,21 @@ public static partial class RiseCore
                 level.ScreenShake(8);
             }
 
-            ArrowTypes GetSkeletonArrowTypes(string name) 
+            static ArrowTypes GetSkeletonArrowTypes(string name) 
             {
                 if (OnGetSkeletonArrowTypes != null && OnGetSkeletonArrowTypes(name, out ArrowTypes types)) 
                     return types;
+                
+                var colonIndex = name.IndexOf(':');
+                if (colonIndex != -1) 
+                {
+                    var arrowName = name.Substring(colonIndex);
+                    if (RiseCore.ArrowsRegistry.TryGetValue(arrowName, out var obj)) 
+                    {
+                        return obj.Types;
+                    }
+                    Logger.Error($"[Skeleton Arrow] Arrow Name: '{arrowName}' not found!");
+                }
                 
                 if (name.Contains("Bomb"))
                     return ArrowTypes.Bomb;
@@ -83,7 +97,42 @@ public static partial class RiseCore
                     return ArrowTypes.Laser;
                 if (name.Contains("Prism"))
                     return ArrowTypes.Prism;
+                if (name.Contains("VanillaRandom"))
+                    return GetRandomArrowType(true);
+                if (name.Contains("Random"))
+                    return GetRandomArrowType(false);
                 return ArrowTypes.Normal;
+            }
+
+            static ArrowTypes GetRandomArrowType(bool vanilla)
+            {
+                List<ArrowTypes> list = new()
+                {
+                    ArrowTypes.Normal,
+                    ArrowTypes.Bomb,
+                    ArrowTypes.Laser,
+                    ArrowTypes.Bramble,
+                    ArrowTypes.Drill,
+                    ArrowTypes.Bolt,
+                    ArrowTypes.SuperBomb,
+                    ArrowTypes.Feather
+                };
+                if (TowerFall.GameData.DarkWorldDLC)
+                {
+                    list.Add(ArrowTypes.Trigger);
+                    list.Add(ArrowTypes.Prism);
+                }
+                if (!vanilla)
+                    foreach (var customArrow in RiseCore.ArrowsRegistry.Values) 
+                    {
+                        list.Add(customArrow.Types);
+                    }
+                
+                if (list.Count == 0)
+                {
+                    return ArrowTypes.Normal;
+                }
+                return Calc.Random.Choose(list);
             }
         }
     }

@@ -23,7 +23,7 @@ public class Installer
 
 
     private static readonly string[] fileDependencies = {
-        "FNA.dll", "FNA.dll.config",
+        "FNA.dll", "FNA.dll.config", "FNA.pdb",
         "FNA.xml", "MonoMod.RuntimeDetour.HookGen.dll",
         "MonoMod.Patcher.dll", "ModPorter.dll",
         "MonoMod.xml", "0Harmony.dll",
@@ -37,8 +37,9 @@ public class Installer
         "MonoMod.Core.dll", "MonoMod.Core.xml", "MonoMod.Iced.dll", "MonoMod.Iced.xml",
         "MonoMod.RuntimeDetour.dll", "MonoMod.RuntimeDetour.xml",
         "Mono.Cecil.dll", "Mono.Cecil.Mdb.dll", "Mono.Cecil.Pdb.dll",
-        "TeuJson.dll", "DotNetZip.dll", "NLua.dll", "KeraLua.dll",
-        "DiscordGameSdk.dll", "Fortrise.targets"
+        "TeuJson.dll", "Ionic.Zip.Reduced.dll", "NLua.dll", "KeraLua.dll",
+        "MonoMod.ILHelpers.dll", "MonoMod.Backports.dll", "Hjson.dll",
+        "DiscordGameSdk.dll", "DiscordGameSdk.pdb", "Fortrise.targets"
     };
 
     private static string[] fnaLibs; 
@@ -227,7 +228,7 @@ public class Installer
         Underline("Writing the version file");
 
         var sb = new StringBuilder();
-        sb.AppendLine("Installer Version: " + "4.3.0");
+        sb.AppendLine("Installer Version: " + "4.7.0");
 
         var text = sb.ToString();
 

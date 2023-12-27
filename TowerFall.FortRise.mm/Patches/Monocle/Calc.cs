@@ -10,6 +10,8 @@ namespace Monocle;
 
 public static class patch_Calc 
 {
+    public static string LOADPATH;
+    public static string DW_LOADPATH;
     public static XmlDocument LoadXML(Stream stream) 
     {
         using var textReader = new StreamReader(stream);
@@ -19,25 +21,26 @@ public static class patch_Calc
     }
 
     [MonoModReplace]
-    public static T StringToEnum<T>(string str) where T : struct 
+    public static T StringToEnum<T>(string str) where T : struct, Enum 
     {
         if (Enum.IsDefined(typeof(T), str)) 
         {
-            return (T)((object)Enum.Parse(typeof(T), str));
+            return (T)Enum.Parse(typeof(T), str);
         }
         // Try to get the pickup value
         else if (RiseCore.PickupRegistry.TryGetValue(str, out var s) && s.ID is T custmPickup) 
         {
             return custmPickup;
         }
-        throw new Exception("The string cannot be converted to the enum type");
+        Logger.Error("[Calc][StringToEnum] The string cannot be converted to the enum type");
+        return default;
     }
 
     public static bool TryStringToEnum<T>(string str, out T result) where T : struct 
     {
         if (Enum.IsDefined(typeof(T), str)) 
         {
-            result = (T)((object)Enum.Parse(typeof(T), str));
+            result = (T)Enum.Parse(typeof(T), str);
             return true;
         }
         // Try to get the pickup value

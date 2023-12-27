@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using FortRise.Adventure;
@@ -6,6 +7,8 @@ using Monocle;
 
 namespace TowerFall;
 
+
+[Obsolete("Will be removed in FortRise 5")]
 public sealed class UploadMapButton : patch_MapButton
 {
     public UploadMapButton() : base("UPLOAD LEVELS")

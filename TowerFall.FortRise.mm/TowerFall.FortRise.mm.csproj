@@ -23,14 +23,18 @@
     <PackageReference Include="TeuJson" Version="3.1.2" />
     <PackageReference Include="TeuJson.Generator" Version="3.1.2" />
     <PackageReference Include="System.Drawing.Common" Version="7.0.0" />
+    <PackageReference Include="Hjson" Version="3.0.0" />
     <PackageReference Include="Mono.Cecil" Version="0.11.4" />
-    <PackageReference Include="DotNetZip" Version="1.16.0" />
+    <PackageReference Include="DotNetZip.Reduced" Version="1.9.1.8" />
     <PackageReference Include="KeraLua" Version="1.0.22" />
     <PackageReference Include="NLua" Version="1.4.25" />
   </ItemGroup>
 
   <ItemGroup>
     <EmbeddedResource Include="Content\Atlas\**\*">
+      <LogicalName>%(EmbeddedResource.Identity)</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Content\Scripts\fort.lua">
       <LogicalName>%(EmbeddedResource.Identity)</LogicalName>
     </EmbeddedResource>
   </ItemGroup>

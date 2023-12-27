@@ -27,7 +27,11 @@ public class VanillaMusicSystem : IMusicSystem
             return;
         soundBank.PlayCue(name);
     }
-    
+
+    public void Play(TrackInfo trackInfo)
+    {
+        Logger.Log("[FACT Music System] Playing a trackInfo type music is not supported!");
+    }
 
     public void Resume()
     {

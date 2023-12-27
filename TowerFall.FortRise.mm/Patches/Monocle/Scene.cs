@@ -1,26 +1,25 @@
-using System;
 using System.Collections.Generic;
-using System.Linq;
 using FortRise;
 
 namespace Monocle;
 
 public class patch_Scene : Scene 
 {
-    public List<string> SceneTags;
+    public List<string> SceneTags => sceneTags;
+    private List<string> sceneTags;
 
     public void AssignTag(string tag) 
     {
-        SceneTags ??= new List<string>();
-        SceneTags.Add(tag); 
+        sceneTags ??= new List<string>();
+        sceneTags.Add(tag); 
     }
 
     public bool HasTags(params string[] tags) 
     {
-        SceneTags ??= new List<string>();
+        sceneTags ??= new List<string>();
         foreach (var tag in tags) 
         {
-            if (SceneTags.Contains(tag))
+            if (sceneTags.Contains(tag))
                 return true;
         }
         return false;
@@ -28,13 +27,13 @@ public class patch_Scene : Scene
 
     public bool HasTag(string tags) 
     {
-        SceneTags ??= new List<string>();
-        return SceneTags.Contains(tags);
+        sceneTags ??= new List<string>();
+        return sceneTags.Contains(tags);
     }
 
     public void LogTags() 
     {
-        foreach (var tag in SceneTags) 
+        foreach (var tag in sceneTags) 
         {
             Logger.Info($"[TAGS] {tag}");
         }

@@ -2,6 +2,7 @@ using System;
 
 namespace TowerFall;
 
+[Obsolete("Use FortRise.GameMode instead")]
 public sealed class CustomRoundLogicAttribute : Attribute 
 {
     public string Name;

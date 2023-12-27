@@ -46,7 +46,7 @@ namespace Monocle
 		}
 
         [MonoModIgnore]
-        [PatchScreenSetWindowSize]
+        [ObsoletePatch("For compability sake, please use SetWindowSize(int, int, bool) with the third argument being `false`")]
         private extern void SetWindowSize(int width, int height);
 
         [MonoModIgnore]
@@ -62,24 +62,9 @@ namespace MonoMod
     [MonoModCustomMethodAttribute(nameof(MonoModRules.PatchScreenCtor))]
     internal class PatchScreenCtor : Attribute {}
 
-    [MonoModCustomMethodAttribute(nameof(MonoModRules.PatchSetWindowSize))]
-    internal class PatchScreenSetWindowSize: Attribute {}
 
     internal static partial class MonoModRules 
     {
-        public static void PatchSetWindowSize(ILContext ctx, CustomAttribute attrib) 
-        {
-            var typeRef = ctx.Module.ImportReference(
-                typeof(System.String));
-            var obsoleteAttributeRef = ctx.Module.ImportReference(
-                typeof(System.ObsoleteAttribute)
-            .GetConstructor(new Type[1] { typeof(System.String) }));
-            var obsolete = new CustomAttribute(obsoleteAttributeRef);
-            obsolete.ConstructorArguments.Add(new CustomAttributeArgument(typeRef, "For compability sake, please use SetWindowSize(int, int, bool) with the third argument being `false`"));
-            ctx.Method.CustomAttributes.Add(obsolete);
-        }
-
-
         public static void PatchScreenResize(ILContext ctx, CustomAttribute attrib) 
         {
             var height = ctx.Method.DeclaringType.FindField("height");

@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
@@ -44,6 +43,12 @@ internal class PatchDarkWorldLevelSelectOverlayCtor : Attribute {}
 [MonoModCustomMethodAttribute(nameof(MonoModRules.PatchFlags))]
 internal class PatchFlags : Attribute {}
 
+[MonoModCustomMethodAttribute(nameof(MonoModRules.ObsoletePatch))]
+internal class ObsoletePatch : Attribute 
+{
+    public ObsoletePatch(string arg) {}
+}
+
 internal static partial class MonoModRules 
 {
     private static bool IsTowerFall;
@@ -75,23 +80,13 @@ internal static partial class MonoModRules
         MonoModRule.Modder.PostProcessors += PostProcessor;
         IsMod = RulesModule == null || !MonoModRule.Modder.Mods.Contains(RulesModule);
 
-        try 
-        {
-            using var fs = File.OpenRead("PatchVersion.txt");
-            using StreamReader sr = new StreamReader(fs);
-            var lines = sr.ReadToEnd().Split('\n');
-            ParseArgs(lines);
-        }
-        catch 
-        {
-            // No-Op
-        }
-
         Console.WriteLine($"[FortRise] Is Mod? {IsMod}");
 
         if (IsMod) 
         {
+            MonoModRule.Modder.PostProcessors += ModPostProcessor;
             AssemblyNameReference TowerFallAsmRef = new AssemblyNameReference("TowerFall", new Version(1, 0, 0, 0));
+            Console.WriteLine("[FortRise] Mod Relinking");
             if (IsFNA && RelinkAgainstFNA(MonoModRule.Modder))
                 Console.WriteLine("[FortRise] Relinked to FNA");
             if (!(MonoModRule.Modder.Module.AssemblyReferences.FirstOrDefault(asmRef => asmRef.Name.Equals(TowerFallAsmRef.Name)) is AssemblyNameReference towerFallRef)) 
@@ -194,21 +189,6 @@ internal static partial class MonoModRules
             VisitType(type);
     }
 
-    public static void ParseArgs(string[] lines) 
-    {
-        foreach (var line in lines) 
-        {
-            var split = line.Split(':');
-            switch (split[0]) 
-            {
-            case "FNA":
-                var isTrue = bool.Parse(split[1]);
-                IsFNA = isTrue;
-                break;
-            }
-        }
-    }
-
     public static System.Reflection.AssemblyName GetRulesAssemblyRef(string name) 
     { 
         System.Reflection.AssemblyName asmName = null;
@@ -296,29 +276,50 @@ internal static partial class MonoModRules
 
     private static bool RelinkAgainstFNA(MonoModder modder) 
     {
-        // Check if the module references either XNA or FNA
-        bool proceed = false;
-        foreach (var asm in modder.Module.AssemblyReferences) 
+        try 
         {
-            if (asm.Name == "FNA" || asm.Name.StartsWith("Microsoft.Xna.Framework")) 
+            // Check if the module references either XNA or FNA
+            bool proceed = false;
+            foreach (var asm in modder.Module.AssemblyReferences) 
             {
-                proceed = true;
-                break;
+                if (asm.Name == "FNA" || asm.Name.StartsWith("Microsoft.Xna.Framework")) 
+                {
+                    proceed = true;
+                    break;
+                }
             }
+            if (!proceed)
+                return false;
+            // if (!modder.Module.AssemblyReferences.Any(asmRef => asmRef.Name == "FNA" || asmRef.Name.StartsWith("Microsoft.Xna.Framework")))
+            //     return false;
+
+            // Replace XNA assembly references with FNA ones
+            bool didReplaceXNA = ReplaceAssemblyRefs(MonoModRule.Modder, GetRulesAssemblyRef("FNA"));
+
+            // Ensure that FNA.dll can be loaded
+            if (MonoModRule.Modder.FindType("Microsoft.Xna.Framework.Game")?.SafeResolve() == null) 
+                throw new Exception("Failed to resolve Microsoft.Xna.Framework.Game");
+
+            return didReplaceXNA;
         }
-        if (!proceed)
+        catch 
+        {
+            Console.WriteLine("[FortRise] Cannot be Relinked to FNA");
             return false;
-        // if (!modder.Module.AssemblyReferences.Any(asmRef => asmRef.Name == "FNA" || asmRef.Name.StartsWith("Microsoft.Xna.Framework")))
-        //     return false;
+        }
+    }
 
-        // Replace XNA assembly references with FNA ones
-        bool didReplaceXNA = ReplaceAssemblyRefs(MonoModRule.Modder, GetRulesAssemblyRef("FNA"));
-
-        // Ensure that FNA.dll can be loaded
-        if (MonoModRule.Modder.FindType("Microsoft.Xna.Framework.Game")?.SafeResolve() == null)
-            throw new Exception("Failed to resolve Microsoft.Xna.Framework.Game");
-
-        return didReplaceXNA;
+    public static void ObsoletePatch(ILContext ctx, CustomAttribute attrib) 
+    {
+        string strArg = attrib.ConstructorArguments[0].Value as string;
+        var typeRef = ctx.Module.ImportReference(
+            typeof(System.String));
+        var obsoleteAttributeRef = ctx.Module.ImportReference(
+            typeof(System.ObsoleteAttribute)
+        .GetConstructor(new Type[1] { typeof(System.String) }));
+        var obsolete = new CustomAttribute(obsoleteAttributeRef);
+        obsolete.ConstructorArguments.Add(new CustomAttributeArgument(typeRef, strArg));
+        ctx.Method.CustomAttributes.Add(obsolete);
     }
 
     public static void PatchPostFix(ILContext ctx, CustomAttribute attrib) 
@@ -590,6 +591,44 @@ internal static partial class MonoModRules
         var targetType = moveNext.DeclaringType;
         customAttribute.ConstructorArguments.Add(new CustomAttributeArgument(typeRef, targetType));
         method.CustomAttributes.Add(customAttribute);
+    }
+
+    private static void ModPostProcessor(MonoModder modder) 
+    {
+        var towerfall = ModuleDefinition.ReadModule("TowerFall.exe");
+        foreach (var type in modder.Module.Types) 
+        {
+            // a tiny namespace mistake can be a huge problem for compatibility
+            // but I want to be consistent at everything, so old mods using the wrong namespace
+            // will be relinked to a correct namespace
+            towerfall.ReplaceAttribute(modder, type, "TowerFall.CustomArrowsAttribute", "FortRise.CustomArrowsAttribute", "System.String,System.String");
+        }
+    }
+
+    private static void ReplaceAttribute(
+        this ModuleDefinition module, 
+        MonoModder modder,
+        TypeDefinition type, 
+        string fullnameFrom, 
+        string fullnameTo,
+        string args) 
+    {
+        var tfArrowAttribute = type.GetCustomAttribute(fullnameFrom);
+        if (tfArrowAttribute is null)
+            return;
+        Console.WriteLine("[FortRise][MOD] " + type.FullName);
+        Console.WriteLine($"[FortRise][MOD] Replacing {fullnameFrom} -> {fullnameTo}");
+        var typeRef = module.GetType("FortRise.CustomArrowsAttribute");
+        
+        var frArrowAttributeTypes = modder.Module.ImportReference(typeRef).Resolve();
+        var constructor = frArrowAttributeTypes.FindMethod($"System.Void .ctor({args})");
+        var frArrowAttribute = new CustomAttribute(modder.Module.ImportReference(constructor));
+        foreach (var arg in tfArrowAttribute.ConstructorArguments) 
+        {
+            frArrowAttribute.ConstructorArguments.Add(arg);
+        }
+        type.CustomAttributes.Remove(tfArrowAttribute);
+        type.CustomAttributes.Add(frArrowAttribute);
     }
 
     private static void PostProcessor(MonoModder modder) 

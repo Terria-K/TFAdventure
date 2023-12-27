@@ -19,6 +19,35 @@ public class patch_MapRenderer : MapRenderer
     private Sprite<string> darkfang;
     private Sprite<string> cataclysm;
 
+    // The devs does not make these properties instance instead of static.
+    // Fine, I'll do it myself.
+    public int GetInstanceWidth() 
+    {
+        if (node != null && node.Land != null) 
+        {
+            return node.Land.Width;
+        }
+        return MapRenderer.Width;
+    }
+
+    public int GetInstanceHeight() 
+    {
+        if (node != null && node.Land != null) 
+        {
+            return node.Land.Height;
+        }
+        return MapRenderer.Height;
+    }
+
+    public Vector2 GetInstanceCenter() 
+    {
+        if (node != null && node.Land != null) 
+        {
+            return node.Land.HalfSize;
+        }
+        return MapRenderer.Center;
+    }
+
 
     public patch_MapRenderer(bool forceMoonstone) : base(forceMoonstone)
     {
@@ -36,7 +65,7 @@ public class patch_MapRenderer : MapRenderer
             orig_OnSelectionChange(towerName);
             return;
         }
-        if (RiseCore.GameData.MapRenderers.TryGetValue(levelSet, out var node)) 
+        if (ExtendedGameData.InternalMapRenderers.TryGetValue(levelSet, out var node)) 
         {
             node.StartSelection(towerName);
         }
@@ -77,12 +106,14 @@ public class patch_MapRenderer : MapRenderer
             ToggleAllMainElements(true);
             return;
         }
-        if (RiseCore.GameData.MapRenderers.TryGetValue(levelSet, out var val)) 
+        if (ExtendedGameData.InternalMapRenderers.TryGetValue(levelSet, out var val)) 
         {
-            node = RiseCore.GameData.MapRenderers[levelSet];
+            node = val;
             Add(node); 
             ToggleAllMainElements(false);
+            return;
         }
+        ToggleAllMainElements(true);
     }
 
     public void ToggleAllMainElements(bool toggle) 

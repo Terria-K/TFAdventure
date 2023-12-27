@@ -1,0 +1,52 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Terria",
+  "classifications": [ "Common", "Code" ],
+  "identity": "FortRise.Template",
+  "name": "FortRise Template",
+  "shortName": "fortrise",
+  "sourceName": "FortRise.FortTemplate",
+  "tags": {
+    "language": "C#",
+    "type": "project"
+  },
+  "symbols": {
+    "Author": {
+      "type": "parameter",
+      "description": "Mod's author",
+      "datatype": "text",
+      "replaces": "authorIsMe",
+      "defaultValue": "authorIsMe"
+    },
+    "Description": {
+      "type": "parameter",
+      "description": "Mod Description",
+      "datatype": "text",
+      "replaces": "My first mod",
+      "defaultValue": "My first mod"
+    },
+    "Version": {
+      "type": "parameter",
+      "description": "Mod Version",
+      "datatype": "text",
+      "defaultValue": "1.0.0"
+    },
+    "VersionGen": {
+      "type": "parameter",
+      "generator": "join",
+      "replaces": "\"version\": \"1.0.0\"",
+      "parameters": {
+        "symbols": [
+          {
+            "type": "const",
+            "value": "\"version\": "
+          },
+          {
+            "type": "ref",
+            "value": "Version"
+          }
+        ]
+      }
+    }
+  }
+}
