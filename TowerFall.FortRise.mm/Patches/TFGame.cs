@@ -118,7 +118,7 @@ public partial class patch_TFGame : TFGame
             if (!FortRise.RiseCore.Start()) 
             {
                 SDL2.SDL.SDL_ShowSimpleMessageBox(
-                    SDL.SDL_MessageBoxFlags.SDL_MESSAGEBOX_ERROR, 
+                    SDL2.SDL.SDL_MessageBoxFlags.SDL_MESSAGEBOX_ERROR, 
                     "CONTENT NOT FOUND",
                     "TowerFall Content cannot be found elsewhere.", IntPtr.Zero);
                 return;
@@ -154,21 +154,21 @@ public partial class patch_TFGame : TFGame
             }
             if (RiseCore.DebugMode) 
             {
-                var detourModManager = new DetourModManager();
-                detourModManager.OnILHook += (assembly, source, dest) => 
-                {
-                    object obj = dest.Target;
-                    RiseCore.DetourLogs.Add($"ILHook from {assembly.GetName().Name}: {source.GetID()} :: {dest.Method?.GetID() ?? "??"}{(obj == null ? "" : $"(object: {obj})")}");
-                };
-                detourModManager.OnHook += (assembly, source, dest, obj) => 
-                {
-                    RiseCore.DetourLogs.Add($"Hook from {assembly.GetName().Name}: {source.GetID()} :: {dest.GetID()}{(obj == null ? "" : $"(object: {obj})")}");
-                };
+                // var detourModManager = new DetourModManager();
+                // detourModManager.OnILHook += (assembly, source, dest) => 
+                // {
+                //     object obj = dest.Target;
+                //     RiseCore.DetourLogs.Add($"ILHook from {assembly.GetName().Name}: {source.GetID()} :: {dest.Method?.GetID() ?? "??"}{(obj == null ? "" : $"(object: {obj})")}");
+                // };
+                // detourModManager.OnHook += (assembly, source, dest, obj) => 
+                // {
+                //     RiseCore.DetourLogs.Add($"Hook from {assembly.GetName().Name}: {source.GetID()} :: {dest.GetID()}{(obj == null ? "" : $"(object: {obj})")}");
+                // };
 
-                detourModManager.OnDetour += (assembly, source, dest) => 
-                {
-                    RiseCore.DetourLogs.Add($"Detour from {assembly.GetName().Name}: {source.GetID()} :: {dest.GetID()}");
-                };
+                // detourModManager.OnDetour += (assembly, source, dest) => 
+                // {
+                //     RiseCore.DetourLogs.Add($"Detour from {assembly.GetName().Name}: {source.GetID()} :: {dest.GetID()}");
+                // };
                 
                 try 
                 {
@@ -228,23 +228,23 @@ public partial class patch_TFGame : TFGame
             bool loadLog = false;
             foreach (string text in args)
             {
-                if (text.ToLower(CultureInfo.InvariantCulture) == "nointro" || text.ToLower(CultureInfo.InvariantCulture) == "-nointro")
+                if (text.ToLowerInvariant() == "nointro" || text.ToLowerInvariant() == "-nointro")
                 {
                     noIntro = true;
                 }
-                else if (text.ToLower(CultureInfo.InvariantCulture) == "loadlog" || text.ToLower(CultureInfo.InvariantCulture) == "-loadlog")
+                else if (text.ToLowerInvariant() == "loadlog" || text.ToLowerInvariant() == "-loadlog")
                 {
                     loadLog = true;
                 }
-                else if (text.ToLower(CultureInfo.InvariantCulture) == "noquit" || text.ToLower(CultureInfo.InvariantCulture) == "-noquit")
+                else if (text.ToLowerInvariant() == "noquit" || text.ToLowerInvariant() == "-noquit")
                 {
                     MainMenu.NoQuit = true;
                 }
-                else if (text.ToLower(CultureInfo.InvariantCulture) == "nogamepads" || text.ToLower(CultureInfo.InvariantCulture) == "-nogamepads")
+                else if (text.ToLowerInvariant() == "nogamepads" || text.ToLowerInvariant() == "-nogamepads")
                 {
                     MainMenu.NoGamepads = true;
                 }
-                else if (text.ToLower(CultureInfo.InvariantCulture) == "nogamepadupdates" || text.ToLower(CultureInfo.InvariantCulture) == "-nogamepadupdates")
+                else if (text.ToLowerInvariant() == "nogamepadupdates" || text.ToLowerInvariant() == "-nogamepadupdates")
                 {
                     MainMenu.NoGamepadUpdates = true;
                 }
@@ -268,7 +268,7 @@ public partial class patch_TFGame : TFGame
             }
             catch (NoSuitableGraphicsDeviceException)
             {
-                SDL.SDL_ShowSimpleMessageBox(SDL.SDL_MessageBoxFlags.SDL_MESSAGEBOX_ERROR, "SAVE THIS MESSAGE!", "No suitable graphics card found!", IntPtr.Zero);
+                SDL2.SDL.SDL_ShowSimpleMessageBox(SDL2.SDL.SDL_MessageBoxFlags.SDL_MESSAGEBOX_ERROR, "SAVE THIS MESSAGE!", "No suitable graphics card found!", IntPtr.Zero);
             }
             catch (Exception ex)
             {

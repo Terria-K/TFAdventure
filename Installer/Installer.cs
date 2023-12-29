@@ -47,6 +47,23 @@ public class Installer
 
     public void Install(string path) 
     {
+        try 
+        {
+            InternalInstall(path);
+        }
+        finally 
+        {
+            if (File.Exists(Path.Combine(path, "TowerFall.FortRise.mm.dll")))
+                File.Delete(Path.Combine(path, "TowerFall.FortRise.mm.dll"));
+            if (File.Exists(Path.Combine(path, "TowerFall.dll")))
+                File.Delete(Path.Combine(path, "TowerFall.dll"));
+            
+            Directory.Delete(Path.Combine(path, "temporary"), true);
+        }
+    }
+
+    public void InternalInstall(string path) 
+    {
         // Let's try to not do it at compile-time.. It's really hard to maintain that way
         string FNAPath;
         Action<string> FNACopy;
@@ -94,6 +111,11 @@ public class Installer
         }
         
         var fortOrigPath = Path.Combine(path, "fortOrig");
+        var fortPath = Path.Combine(path, "temporary");
+        if (!Directory.Exists(fortPath)) 
+        {
+            Directory.CreateDirectory(fortPath);
+        }
 
         if (File.Exists(Path.Combine(fortOrigPath, "TowerFall.exe"))) 
         {
@@ -128,8 +150,8 @@ public class Installer
         if (Environment.OSVersion.Platform == PlatformID.Win32NT) 
         {
             Underline("Supporting DInput and other SDL controllers");
-            if (!File.Exists(Path.Combine(path, "gamecontrollerdb.txt")))
-                File.Copy(Path.Combine(libPath, "gamecontrollerdb.txt"), Path.Combine(path, "gamecontrollerdb.txt"), true);
+            if (!File.Exists(Path.Combine(fortPath, "gamecontrollerdb.txt")))
+                File.Copy(Path.Combine(libPath, "gamecontrollerdb.txt"), Path.Combine(fortPath, "gamecontrollerdb.txt"), true);
         }
 
         Underline("Moving the mod into TowerFall directory");
@@ -140,6 +162,7 @@ public class Installer
             ThrowError("TowerFall.FortRise.mm.dll mod file not found!");
             return;
         }
+        File.Copy(fortRiseDll, Path.Combine(fortPath, "TowerFall.FortRise.mm.dll"), true);
         File.Copy(fortRiseDll, Path.Combine(path, "TowerFall.FortRise.mm.dll"), true);
 
         Underline("Moving all of the lib files");
@@ -152,41 +175,42 @@ public class Installer
                 continue;
             }
 
-            File.Copy(lib, Path.Combine(path, Path.GetFileName(lib)), true);
+            File.Copy(lib, Path.Combine(fortPath, Path.GetFileName(lib)), true);
         }
 
         Underline($"Moving all of the FNA files on {FNAPath}");
-        FNACopy(path);
+        FNACopy(fortPath);
 
 
         Underline("Generating XML Document");
-        GenerateDOC(Path.Combine(libPath, "TowerFall.FortRise.mm.xml"), Path.Combine(path, "TowerFall.xml"));
+        GenerateDOC(Path.Combine(libPath, "TowerFall.FortRise.mm.xml"), Path.Combine(fortPath, "TowerFall.xml"));
 
 
         Underline("Patching TowerFall");
-        LoadAssembly(Path.Combine(path, "Mono.Cecil.dll"));
-        LoadAssembly(Path.Combine(path, "Mono.Cecil.Pdb.dll"));
-        LoadAssembly(Path.Combine(path, "Mono.Cecil.Mdb.dll"));
-        LoadAssembly(Path.Combine(path, "MonoMod.Utils.dll"));
-        LoadAssembly(Path.Combine(path, "MonoMod.RuntimeDetour.dll"));
+        LoadAssembly(Path.Combine(fortPath, "Mono.Cecil.dll"));
+        LoadAssembly(Path.Combine(fortPath, "Mono.Cecil.Pdb.dll"));
+        LoadAssembly(Path.Combine(fortPath, "Mono.Cecil.Mdb.dll"));
+        LoadAssembly(Path.Combine(fortPath, "MonoMod.Utils.dll"));
+        LoadAssembly(Path.Combine(fortPath, "MonoMod.RuntimeDetour.dll"));
 
-        AsmMonoMod = LoadAssembly(Path.Combine(path, "MonoMod.Patcher.dll"));
-        AsmModPorter = LoadAssembly(Path.Combine(path, "ModPorter.dll"));
-        AsmHookGen = LoadAssembly(Path.Combine(path, "MonoMod.RuntimeDetour.HookGen.dll"));
+        AsmMonoMod = LoadAssembly(Path.Combine(fortPath, "MonoMod.Patcher.dll"));
+        AsmModPorter = LoadAssembly(Path.Combine(fortPath, "ModPorter.dll"));
+        AsmHookGen = LoadAssembly(Path.Combine(fortPath, "MonoMod.RuntimeDetour.HookGen.dll"));
 
-        var towerFallExe = Path.Combine(path, "TowerFall.dll");
-        var towerFallPdb = Path.Combine(path, "TowerFall.pdb");
+        var towerFallExe = Path.Combine(fortPath, "TowerFall.dll");
+        var towerFallPdb = Path.Combine(fortPath, "TowerFall.pdb");
 
         PortToFNA(Path.Combine(path, "TowerFall.exe"), Path.Combine(path, "FNA-TowerFall.exe"));
-        File.Move(Path.Combine(path, "FNA-TowerFall.exe"), Path.Combine(path, "TowerFall.exe"), true);
 
         ConvertToNETCore(
-            Path.Combine(path, "TowerFall.exe"), 
-            Path.Combine(path, "TowerFall.dll"));
+            Path.Combine(path, "FNA-TowerFall.exe"), 
+            Path.Combine(fortPath, "TowerFall.dll"));
+        
+        File.Copy(Path.Combine(fortPath, "TowerFall.dll"), Path.Combine(path, "TowerFall.dll"), true);
 
         Environment.SetEnvironmentVariable("MONOMOD_DEPENDENCY_MISSING_THROW", "0");
         int returnCode = (int) AsmMonoMod.EntryPoint.Invoke(null, new object[] { 
-            new string[] { Path.Combine(path, "TowerFall.dll"), Path.Combine(path, "MONOMODDED_TowerFall.dll") } });
+            new string[] { Path.Combine(path, "TowerFall.dll"), Path.Combine(fortPath, "MONOMODDED_TowerFall.dll") } });
         if (returnCode != 0) 
         {
             ThrowError("MonoMod failed to patch the assembly");
@@ -205,25 +229,25 @@ public class Installer
             File.Delete(towerFallPdb);
         }
 
-        var moddedOutputExe = Path.Combine(path, "MONOMODDED_TowerFall.dll");
-        var moddedOutputPdb = Path.Combine(path, "MONOMODDED_TowerFall.pdb");
+        var moddedOutputExe = Path.Combine(fortPath, "MONOMODDED_TowerFall.dll");
+        var moddedOutputPdb = Path.Combine(fortPath, "MONOMODDED_TowerFall.pdb");
         File.Move(moddedOutputExe, towerFallExe);
         File.Move(moddedOutputPdb, towerFallPdb);
 
         Yellow("Generating HookGen");
 
         Environment.SetEnvironmentVariable("MONOMOD_DEPENDENCY_MISSING_THROW", "0");
-        AsmHookGen.EntryPoint.Invoke(null, new object[] { new string[] { "--private", Path.Combine(path, "TowerFall.dll"), Path.Combine(path, "MMHOOK_TowerFall.dll") } });
+        AsmHookGen.EntryPoint.Invoke(null, new object[] { new string[] { "--private", Path.Combine(fortPath, "TowerFall.dll"), Path.Combine(fortPath, "MMHOOK_TowerFall.dll") } });
 
 
         AsmModPorter.GetType("ModPorter.NetCoreUtils")
             .GetMethod("GenerateRuntimeConfig", BindingFlags.Static | BindingFlags.Public, null, new Type[] { 
                 typeof(string), typeof(string[])}, null)
-            .Invoke(null, new object[] { Path.Combine(path, "TowerFall.dll"), new string[] {
-                Path.Combine(path, "MMHOOK_TowerFall.dll")
+            .Invoke(null, new object[] { Path.Combine(fortPath, "TowerFall.dll"), new string[] {
+                Path.Combine(fortPath, "MMHOOK_TowerFall.dll")
             } });
 
-        var patchVersion = Path.Combine(path, "PatchVersion.txt");
+        var patchVersion = Path.Combine(fortPath, "PatchVersion.txt");
 
         Underline("Writing the version file");
 
@@ -232,7 +256,32 @@ public class Installer
 
         var text = sb.ToString();
 
-        File.WriteAllText(Path.Combine(path, "PatchVersion.txt"), sb.ToString());
+        File.WriteAllText(Path.Combine(fortPath, "PatchVersion.txt"), sb.ToString());
+
+        Underline("Moving all temporary files to the new FortRise directory");
+        var files = Directory.GetFiles(Path.Combine(path, "temporary"));
+        var dirs = Directory.GetDirectories(Path.Combine(path, "temporary"));
+        foreach (var dir in dirs) 
+        {
+            var anotherFiles = Directory.GetFiles(dir);
+            foreach (var file in anotherFiles) 
+            {
+                File.Copy(file, Path.Combine(path, "..", "FortRise", Path.GetFileName(dir), Path.GetFileName(file)), true);
+            }
+        }
+        foreach (var file in files) 
+        {
+            File.Copy(file, Path.Combine(path, "..", "FortRise", Path.GetFileName(file)), true);
+        }
+
+
+        Underline("Creating a symbolic link");
+        var fortrisePath = Path.Combine(path, "..", "FortRise");
+        if (!Directory.Exists(Path.Combine(fortrisePath, "Content")))
+            Directory.CreateSymbolicLink(Path.Combine(fortrisePath, "Content"), Path.GetFullPath(Path.Combine(path, "Content")));
+        if (Directory.Exists(Path.Combine(path, "DarkWorldContent")) && !Directory.Exists(Path.Combine(fortrisePath, "DarkWorldContent")))
+            Directory.CreateSymbolicLink(Path.Combine(fortrisePath, "DarkWorldContent"), Path.GetFullPath(Path.Combine(path, "DarkWorldContent")));
+
 
         Yellow("Cleaning up");
         Environment.SetEnvironmentVariable("MONOMOD_DEPENDENCY_MISSING_THROW", "");
@@ -270,9 +319,9 @@ public class Installer
             var dstPath = Path.Combine(Path.GetDirectoryName(asmTo), $"CORE-{dep}.dll");
             if (File.Exists(srcPath) && !IsSystemLibrary(srcPath))
             {
-                if (!File.Exists(Path.Combine(Path.GetDirectoryName(asmFrom), $"fortOrig/{dep}.dll")))
-                    File.Copy(Path.Combine(Path.GetDirectoryName(asmFrom), $"{dep}.dll"), 
-                        Path.Combine(Path.GetDirectoryName(asmFrom), $"fortOrig/{dep}.dll"));
+                // if (!File.Exists(Path.Combine(Path.GetDirectoryName(asmFrom), $"fortOrig/{dep}.dll")))
+                //     File.Copy(Path.Combine(Path.GetDirectoryName(asmFrom), $"{dep}.dll"), 
+                //         Path.Combine(Path.GetDirectoryName(asmFrom), $"fortOrig/{dep}.dll"));
                 ConvertToNETCore(srcPath, dstPath);
 
                 if (!File.Exists(dstPath))
@@ -281,9 +330,9 @@ public class Installer
             }
             else if (File.Exists(dstPath) && !IsSystemLibrary(srcPath))
             {
-                if (!File.Exists(Path.Combine(Path.GetDirectoryName(asmFrom), $"fortOrig/{dep}.dll")))
-                    File.Copy(Path.Combine(Path.GetDirectoryName(asmFrom), $"{dep}.dll"), 
-                        Path.Combine(Path.GetDirectoryName(asmFrom), $"fortOrig/{dep}.dll"));
+                // if (!File.Exists(Path.Combine(Path.GetDirectoryName(asmFrom), $"fortOrig/{dep}.dll")))
+                //     File.Copy(Path.Combine(Path.GetDirectoryName(asmFrom), $"{dep}.dll"), 
+                //         Path.Combine(Path.GetDirectoryName(asmFrom), $"fortOrig/{dep}.dll"));
                 ConvertToNETCore(dstPath);
 
                 File.Move(Path.Combine(Path.GetDirectoryName(asmTo), $"CORE-{dep}.dll"), Path.Combine(Path.GetDirectoryName(asmTo), $"{dep}.dll"), true);

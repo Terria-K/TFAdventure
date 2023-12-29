@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <TargetFramework>net7.0</TargetFramework>
-    <LangVersion>10</LangVersion>
+    <LangVersion>11</LangVersion>
     <RootNamespace>TowerFall</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AssemblyName>TowerFall.FortRise.mm</AssemblyName>
@@ -23,7 +23,6 @@
     <PackageReference Include="TeuJson" Version="3.1.2" />
     <PackageReference Include="TeuJson.Generator" Version="3.1.2" />
     <PackageReference Include="System.Drawing.Common" Version="7.0.0" />
-    <PackageReference Include="Hjson" Version="3.0.0" />
     <PackageReference Include="Mono.Cecil" Version="0.11.4" />
     <PackageReference Include="DotNetZip.Reduced" Version="1.9.1.8" />
     <PackageReference Include="KeraLua" Version="1.0.22" />
@@ -52,6 +51,10 @@
     <Reference Include="System.Windows.Forms"/>
     <Reference Include="TowerFall">
       <HintPath>..\lib-stripped\TowerFall.exe</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Hjson">
+      <HintPath>..\lib\Hjson.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="FNA">

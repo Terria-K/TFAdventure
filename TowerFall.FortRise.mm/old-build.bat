@@ -1,3 +1,4 @@
+cd "D:\Program Files\Steam\steamapps\common\TowerFall\MonoMod\TowerfallMM\TowerFall.FortRise.mm"
 dotnet build -c Release
 cd bin/Release/net7.0
 

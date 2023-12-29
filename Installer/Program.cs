@@ -24,7 +24,7 @@ internal class Program
                 if (args[0] == "--patch") 
                 {
                     Console.WriteLine("Installing FortRise");
-                    installer.Install(args[1]);
+                    installer.InternalInstall(args[1]);
                 }
                 else if (args[0] == "--unpatch") 
                 {
